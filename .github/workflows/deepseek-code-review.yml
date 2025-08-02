@@ -1,0 +1,23 @@
+name: Code Review
+on:
+  pull_request_target:
+    types:
+      - opened # Triggers when a PR is opened
+      - reopened # Triggers when a PR is reopened
+      - synchronize # Triggers when a commit is pushed to the PR (see if we want to disable this to reduce usage)
+
+permissions:
+  pull-requests: write
+
+jobs:
+  setup-deepseek-review:
+    runs-on: ubuntu-latest
+    name: Code Review
+    steps:
+      - name: DeepSeek Code Review
+        uses: hustcer/deepseek-review@v1
+        with:
+          chat-token: ${{ secrets.CHAT_TOKEN }}
+          user-prompt: >
+            Please review the following code changes and include a 1 line confucius quote at the top of the review comment, separated from the actual review comment by a horizontal line. Then, include a 1 line Taoism quote by Laozi or Zhuangzi after the review comment to counter the Confucius quote above, separated from the actual review comment by a horizontal line.
+          github-token: ${{ secrets.PERSONAL_TOKEN }}
