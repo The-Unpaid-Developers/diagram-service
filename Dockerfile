@@ -7,5 +7,5 @@ RUN mvn package -DskipTests
 # Package stage
 FROM docker.io/eclipse-temurin:21-jre-alpine
 COPY --from=build /usr/app/target/*-SNAPSHOT.jar app.jar
-EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["java","-jar","app.jar"]
