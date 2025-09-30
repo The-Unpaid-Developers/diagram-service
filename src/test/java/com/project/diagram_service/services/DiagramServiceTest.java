@@ -322,12 +322,11 @@ class DiagramServiceTest {
     void testGenerateSystemDiagram_EmptySystemCode() {
         // Given
         String emptySystemCode = "";
-        when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When & Then
         assertThatThrownBy(() -> diagramService.generateSystemDependenciesDiagram(emptySystemCode))
-            .isInstanceOf(RuntimeException.class)
-            .hasMessageContaining("System not found:");
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("System code must not be null or blank");
     }
 
     @Test
@@ -335,12 +334,11 @@ class DiagramServiceTest {
     void testGenerateSystemDiagram_WhitespaceSystemCode() {
         // Given
         String whitespaceSystemCode = "   ";
-        when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When & Then
         assertThatThrownBy(() -> diagramService.generateSystemDependenciesDiagram(whitespaceSystemCode))
-            .isInstanceOf(RuntimeException.class)
-            .hasMessageContaining("System not found:");
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("System code must not be null or blank");
     }
 
     @Test
