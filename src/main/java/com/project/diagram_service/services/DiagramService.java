@@ -26,67 +26,38 @@ public class DiagramService {
     /**
      * Retrieves all system dependencies from the core service.
      *
-     * This method fetches a complete list of system dependencies including
-     * solution overviews, integration flows, and related metadata for all systems
-     * in the organization.
-     *
-     * @return a list of {@link SystemDependencyDTO} containing all system dependency information
-     * @throws RuntimeException if the core service call fails or returns an error
+     * @return list of system dependencies with solution overviews and integration flows
+     * @throws RuntimeException if the core service call fails
      */
     public List<SystemDependencyDTO> getSystemDependencies() {
         log.info("Calling core service for system dependencies");
         
-        try {
-            List<SystemDependencyDTO> result = coreServiceClient.getSystemDependencies();
-            log.info("Retrieved {} system dependencies", result.size());
-            return result;
-        } catch (Exception e) {
-            log.error("Error calling core service: {}", e.getMessage());
-            throw e;
-        }
+        List<SystemDependencyDTO> result = coreServiceClient.getSystemDependencies();
+        log.info("Retrieved {} system dependencies", result.size());
+        return result;
     }
     
     /**
-     * Generates a comprehensive system dependencies diagram for the specified system.
+     * Generates a system dependencies diagram showing integration flows and relationships.
      *
-     * This method creates a visual representation of system dependencies by analyzing all
-     * integration flows across the organization to identify relationships with the target system.
+     * Creates nodes for systems and middleware with role-based naming:
+     * - Core system: no suffix (e.g., "sys-001")
+     * - External systems: role suffix (e.g., "sys-002-P" for producer, "sys-003-C" for consumer)
+     * - Middleware: role suffix (e.g., "API_GATEWAY-P", "OSB-C")
      *
-     * The analysis process includes:
-     *   Identifying the primary system as the core system being analyzed
-     *   Examining all other systems' integration flows to find references to the target system
-     *   Determining producer/consumer relationships based on counterpartSystemRole
-     *   Creating role-specific nodes with appropriate suffixes for external systems and middleware
-     *   Handling middleware routing with proper -P (producer) and -C (consumer) designations
+     * Flow logic based on counterpartSystemRole:
+     * - "CONSUMER": target system consumes, source produces
+     * - "PRODUCER": target system produces, source consumes
      *
-     * Node Types and Naming Conventions:
-     *   Core System: The target system (e.g., "sys-001") - no role suffix
-     *   External Systems: Other systems with role suffixes (e.g., "sys-002-P", "sys-003-C")
-     *   Middleware: Infrastructure components with role suffixes (e.g., "API_GATEWAY-P", "OSB-C")
-     *
-     * Flow Direction Logic:
-     *   If counterpartSystemRole = "CONSUMER" → Target system consumes, source system produces
-     *   If counterpartSystemRole = "PRODUCER" → Target system produces, source system consumes
-     *   Data flows left-to-right: Producer → [Middleware] → Consumer
-     *
-     * Middleware Handling:
-     *   Creates separate middleware nodes for producer (-P) and consumer (-C) sides
-     *   Routes flows through middleware: Producer → Middleware-P/C → Consumer
-     *   Ignores middleware when value is null, empty, or "NONE" (creates direct links)
-     *
-     * @param systemCode the unique identifier of the system to generate the diagram for
-     * @return a {@link SystemDiagramDTO} containing nodes, links, and metadata for visualization
-     * @throws RuntimeException if the system is not found or if there's an error during diagram generation
-     *
-     * @see SystemDiagramDTO
-     * @see SystemDependencyDTO.IntegrationFlow
+     * @param systemCode the system to generate the diagram for
+     * @return diagram with nodes, links, and metadata for D3.js Sankey visualization
+     * @throws RuntimeException if system not found
      */
     public SystemDiagramDTO generateSystemDependenciesDiagram(String systemCode) {
         log.info("Generating system dependencies diagram for system: {}", systemCode);
         
-        try {
-            // Get all system dependencies
-            List<SystemDependencyDTO> allDependencies = getSystemDependencies();
+        // Get all system dependencies
+        List<SystemDependencyDTO> allDependencies = getSystemDependencies();
             
             // Find the primary system
             SystemDependencyDTO primarySystem = allDependencies.stream()
@@ -215,7 +186,7 @@ public class DiagramService {
                                 link1.setTarget(middlewareNodeId);
                                 link1.setPattern(flow.getIntegrationMethod());
                                 link1.setFrequency(flow.getFrequency());
-                                link1.setRole("Producer");
+                                link1.setRole("PRODUCER");
                                 links.add(link1);
                                 
                                 SystemDiagramDTO.LinkDTO link2 = new SystemDiagramDTO.LinkDTO();
@@ -223,7 +194,7 @@ public class DiagramService {
                                 link2.setTarget(consumer);
                                 link2.setPattern(flow.getIntegrationMethod());
                                 link2.setFrequency(flow.getFrequency());
-                                link2.setRole("Consumer");
+                                link2.setRole("CONSUMER");
                                 links.add(link2);
                                 
                             } else {
@@ -350,7 +321,7 @@ public class DiagramService {
                         link1.setTarget(middlewareNodeId);
                         link1.setPattern(flow.getIntegrationMethod());
                         link1.setFrequency(flow.getFrequency());
-                        link1.setRole("Producer");
+                        link1.setRole("PRODUCER");
                         links.add(link1);
                         
                         SystemDiagramDTO.LinkDTO link2 = new SystemDiagramDTO.LinkDTO();
@@ -358,7 +329,7 @@ public class DiagramService {
                         link2.setTarget(consumer);
                         link2.setPattern(flow.getIntegrationMethod());
                         link2.setFrequency(flow.getFrequency());
-                        link2.setRole("Consumer");
+                        link2.setRole("CONSUMER");
                         links.add(link2);
                         
                     } else {
@@ -399,19 +370,14 @@ public class DiagramService {
                 nodes.size(), links.size(), systemCode);
             
             return diagram;
-            
-        } catch (Exception e) {
-            log.error("Error generating system dependencies diagram for {}: {}", systemCode, e.getMessage());
-            throw e;
-        }
     }
     
     /**
-     * Helper method to determine the system type based on whether the system exists in our data.
+     * Determines system type based on data availability.
      * 
-     * @param systemCode the system code to check
-     * @param allDependencies the list of all systems in our organization
-     * @return "IncomeSystem" if the system exists in our data, "External" otherwise
+     * @param systemCode system to check
+     * @param allDependencies all known systems
+     * @return "IncomeSystem" if system exists in our data, "External" otherwise
      */
     private String determineSystemType(String systemCode, List<SystemDependencyDTO> allDependencies) {
         boolean existsInOurData = allDependencies.stream()
