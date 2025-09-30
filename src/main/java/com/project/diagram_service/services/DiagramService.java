@@ -133,12 +133,7 @@ public class DiagramService {
                                 consumerSystemCode = system.getSystemCode();
                             }
                             
-                            // Create unique link identifier to avoid duplicates
-                            String linkId = producer + "->" + consumer + ":" + flow.getIntegrationMethod();
-                            if (processedLinks.contains(linkId)) {
-                                continue;
-                            }
-                            processedLinks.add(linkId);
+                            // Create unique link identifier to avoid duplicates (include source system to allow multiple flows through same middleware)\n                            String linkId = system.getSystemCode() + \":\" + producer + \"->\" + consumer + \":\" + flow.getIntegrationMethod();\n                            if (processedLinks.contains(linkId)) {\n                                continue;\n                            }\n                            processedLinks.add(linkId);
                             
                             // Add external system nodes (only for non-main systems)
                             if (!producerSystemCode.equals(systemCode)) {
@@ -156,7 +151,7 @@ public class DiagramService {
                                     } else {
                                         producerNode.setName(producerSystemCode);
                                     }
-                                    producerNode.setType("External");
+                                    producerNode.setType(determineSystemType(producerSystemCode, allDependencies));
                                     producerNode.setCriticality("Major");
                                     producerNode.setUrl(producerSystemCode + ".json");
                                     nodes.add(producerNode);
@@ -178,7 +173,7 @@ public class DiagramService {
                                     } else {
                                         consumerNode.setName(consumerSystemCode);
                                     }
-                                    consumerNode.setType("External");
+                                    consumerNode.setType(determineSystemType(consumerSystemCode, allDependencies));
                                     consumerNode.setCriticality("Major");
                                     consumerNode.setUrl(consumerSystemCode + ".json");
                                     nodes.add(consumerNode);
@@ -214,7 +209,7 @@ public class DiagramService {
                                     nodes.add(middlewareNode);
                                 }
                                 
-                                // Create links through middleware
+                                // Create middleware links for each flow (don't deduplicate middleware routing)
                                 SystemDiagramDTO.LinkDTO link1 = new SystemDiagramDTO.LinkDTO();
                                 link1.setSource(producer);
                                 link1.setTarget(middlewareNodeId);
@@ -244,7 +239,142 @@ public class DiagramService {
                         }
                     }
                 }
-            }            // Build metadata
+            }
+            
+            // Also process the primary system's own integration flows
+            if (primarySystem.getIntegrationFlows() != null) {
+                for (SystemDependencyDTO.IntegrationFlow flow : primarySystem.getIntegrationFlows()) {
+                    String counterpartSystemCode = flow.getCounterpartSystemCode();
+                    
+                    // Determine producer and consumer based on the counterpartSystemRole
+                    String producer, consumer;
+                    String producerSystemCode, consumerSystemCode;
+                    if ("CONSUMER".equals(flow.getCounterpartSystemRole())) {
+                        // counterpart system is CONSUMER, so primary system is PRODUCER
+                        producer = systemCode; // Main system doesn't have role suffix
+                        consumer = counterpartSystemCode + "-C";
+                        producerSystemCode = systemCode;
+                        consumerSystemCode = counterpartSystemCode;
+                    } else {
+                        // counterpart system is PRODUCER, so primary system is CONSUMER
+                        producer = counterpartSystemCode + "-P";
+                        consumer = systemCode; // Main system doesn't have role suffix
+                        producerSystemCode = counterpartSystemCode;
+                        consumerSystemCode = systemCode;
+                    }
+                    
+                    // Create unique link identifier to avoid duplicates (include counterpart system for primary flows)
+                    String linkId = counterpartSystemCode + ":" + producer + "->" + consumer + ":" + flow.getIntegrationMethod();
+                    if (processedLinks.contains(linkId)) {
+                        continue;
+                    }
+                    processedLinks.add(linkId);
+                    
+                    // Add counterpart system nodes (only for non-main systems)
+                    if (!producerSystemCode.equals(systemCode)) {
+                        boolean producerNodeExists = nodes.stream()
+                            .anyMatch(node -> node.getId().equals(producer));
+                        if (!producerNodeExists) {
+                            SystemDependencyDTO producerSystemData = allDependencies.stream()
+                                .filter(s -> s.getSystemCode().equals(producerSystemCode))
+                                .findFirst().orElse(null);
+                            
+                            SystemDiagramDTO.NodeDTO producerNode = new SystemDiagramDTO.NodeDTO();
+                            producerNode.setId(producer);
+                            if (producerSystemData != null) {
+                                producerNode.setName(producerSystemData.getSolutionOverview().getSolutionDetails().getSolutionName());
+                            } else {
+                                producerNode.setName(producerSystemCode);
+                            }
+                            producerNode.setType(determineSystemType(producerSystemCode, allDependencies));
+                            producerNode.setCriticality("Major");
+                            producerNode.setUrl(producerSystemCode + ".json");
+                            nodes.add(producerNode);
+                        }
+                    }
+                    
+                    if (!consumerSystemCode.equals(systemCode)) {
+                        boolean consumerNodeExists = nodes.stream()
+                            .anyMatch(node -> node.getId().equals(consumer));
+                        if (!consumerNodeExists) {
+                            SystemDependencyDTO consumerSystemData = allDependencies.stream()
+                                .filter(s -> s.getSystemCode().equals(consumerSystemCode))
+                                .findFirst().orElse(null);
+                            
+                            SystemDiagramDTO.NodeDTO consumerNode = new SystemDiagramDTO.NodeDTO();
+                            consumerNode.setId(consumer);
+                            if (consumerSystemData != null) {
+                                consumerNode.setName(consumerSystemData.getSolutionOverview().getSolutionDetails().getSolutionName());
+                            } else {
+                                consumerNode.setName(consumerSystemCode);
+                            }
+                            consumerNode.setType(determineSystemType(consumerSystemCode, allDependencies));
+                            consumerNode.setCriticality("Major");
+                            consumerNode.setUrl(consumerSystemCode + ".json");
+                            nodes.add(consumerNode);
+                        }
+                    }
+                    
+                    // Handle middleware
+                    if (flow.getMiddleware() != null && !flow.getMiddleware().trim().isEmpty() 
+                        && !"NONE".equalsIgnoreCase(flow.getMiddleware().trim())) {
+                        String middlewareName = flow.getMiddleware();
+                        middleware.add(middlewareName);
+                        
+                        // Determine which middleware node we need based on the flow direction
+                        String middlewareNodeId;
+                        if (producer.startsWith(systemCode)) {
+                            // primary system is producer, so we need middleware-C (consumer side)
+                            middlewareNodeId = middlewareName + "-C";
+                        } else {
+                            // primary system is consumer, so we need middleware-P (producer side)
+                            middlewareNodeId = middlewareName + "-P";
+                        }
+                        
+                        // Add the required middleware node
+                        boolean middlewareExists = nodes.stream()
+                            .anyMatch(node -> node.getId().equals(middlewareNodeId));
+                        if (!middlewareExists) {
+                            SystemDiagramDTO.NodeDTO middlewareNode = new SystemDiagramDTO.NodeDTO();
+                            middlewareNode.setId(middlewareNodeId);
+                            middlewareNode.setName(middlewareName);
+                            middlewareNode.setType("Middleware");
+                            middlewareNode.setCriticality("Standard-2");
+                            middlewareNode.setUrl(middlewareName + ".json");
+                            nodes.add(middlewareNode);
+                        }
+                        
+                        // Create middleware links for each flow (don't deduplicate middleware routing)
+                        SystemDiagramDTO.LinkDTO link1 = new SystemDiagramDTO.LinkDTO();
+                        link1.setSource(producer);
+                        link1.setTarget(middlewareNodeId);
+                        link1.setPattern(flow.getIntegrationMethod());
+                        link1.setFrequency(flow.getFrequency());
+                        link1.setRole("Producer");
+                        links.add(link1);
+                        
+                        SystemDiagramDTO.LinkDTO link2 = new SystemDiagramDTO.LinkDTO();
+                        link2.setSource(middlewareNodeId);
+                        link2.setTarget(consumer);
+                        link2.setPattern(flow.getIntegrationMethod());
+                        link2.setFrequency(flow.getFrequency());
+                        link2.setRole("Consumer");
+                        links.add(link2);
+                        
+                    } else {
+                        // Direct connection without middleware (when middleware is null, empty, or "NONE")
+                        SystemDiagramDTO.LinkDTO link = new SystemDiagramDTO.LinkDTO();
+                        link.setSource(producer);
+                        link.setTarget(consumer);
+                        link.setPattern(flow.getIntegrationMethod());
+                        link.setFrequency(flow.getFrequency());
+                        link.setRole(flow.getCounterpartSystemRole());
+                        links.add(link);
+                    }
+                }
+            }
+            
+            // Build metadata
             SystemDiagramDTO.MetadataDTO metadata = new SystemDiagramDTO.MetadataDTO();
             metadata.setCode(systemCode);
             metadata.setReview(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionReviewCode());
@@ -274,5 +404,18 @@ public class DiagramService {
             log.error("Error generating system dependencies diagram for {}: {}", systemCode, e.getMessage());
             throw e;
         }
+    }
+    
+    /**
+     * Helper method to determine the system type based on whether the system exists in our data.
+     * 
+     * @param systemCode the system code to check
+     * @param allDependencies the list of all systems in our organization
+     * @return "IncomeSystem" if the system exists in our data, "External" otherwise
+     */
+    private String determineSystemType(String systemCode, List<SystemDependencyDTO> allDependencies) {
+        boolean existsInOurData = allDependencies.stream()
+            .anyMatch(system -> system.getSystemCode().equals(systemCode));
+        return existsInOurData ? "IncomeSystem" : "External";
     }
 }
