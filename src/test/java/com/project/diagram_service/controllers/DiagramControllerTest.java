@@ -55,14 +55,12 @@ class DiagramControllerTest {
         node1.setName("System One");
         node1.setType("Core System");
         node1.setCriticality("Major");
-        node1.setUrl("SYS-001.json");
 
         SystemDiagramDTO.NodeDTO node2 = new SystemDiagramDTO.NodeDTO();
         node2.setId("SYS-002-C");
         node2.setName("System Two");
         node2.setType("IncomeSystem");
         node2.setCriticality("Major");
-        node2.setUrl("SYS-002.json");
 
         SystemDiagramDTO.LinkDTO link = new SystemDiagramDTO.LinkDTO();
         link.setSource("SYS-001");

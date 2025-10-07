@@ -83,6 +83,20 @@ public class DiagramController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    @GetMapping("/system-dependencies/all")
+    public ResponseEntity<SystemDiagramDTO> getAllSystemDependenciesDiagrams() {
+        log.info("Received request for all system dependencies diagrams");
+        
+        try {
+            SystemDiagramDTO diagram = diagramService.generateAllSystemDependenciesDiagrams();
+            return ResponseEntity.ok(diagram);
+        } catch (Exception e) {
+            log.error("Error generating all system dependencies diagrams: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     
     /**
      * Finds all integration paths between two systems and returns them as a diagram.

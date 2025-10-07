@@ -836,7 +836,6 @@ public class DiagramService {
         primaryNode.setName(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionName());
         primaryNode.setType(CORE_SYSTEM_TYPE);
         primaryNode.setCriticality(MAJOR_CRITICALITY);
-        primaryNode.setUrl(systemCode + JSON_EXTENSION);
         return primaryNode;
     }
 
@@ -942,7 +941,6 @@ public class DiagramService {
         middlewareNode.setName(middlewareName);
         middlewareNode.setType(MIDDLEWARE_TYPE);
         middlewareNode.setCriticality(STANDARD_CRITICALITY);
-        middlewareNode.setUrl(middlewareName + JSON_EXTENSION);
         return middlewareNode;
     }
 
@@ -1025,7 +1023,6 @@ public class DiagramService {
                 : systemCode);
         node.setType(determineSystemType(systemCode, allDependencies));
         node.setCriticality(MAJOR_CRITICALITY);
-        node.setUrl(systemCode + JSON_EXTENSION);
         return node;
     }
 
@@ -1070,6 +1067,72 @@ public class DiagramService {
         boolean existsInOurData = allDependencies.stream()
                 .anyMatch(system -> system.getSystemCode().equals(systemCode));
         return existsInOurData ? INCOME_SYSTEM_TYPE : EXTERNAL_SYSTEM_TYPE;
+    }
+
+
+    /**
+     * 
+     */
+    public SystemDiagramDTO generateAllSystemDependenciesDiagrams() {
+        log.info("Generating diagrams for all systems");
+        
+        List<SystemDependencyDTO> allDependencies = getSystemDependencies();
+        SystemDiagramDTO results = extractUniqueLinksAndNodes(allDependencies);
+        SystemDiagramDTO.MetadataDTO metadata = new SystemDiagramDTO.MetadataDTO();
+        metadata.setCode("ALL_SYSTEMS");
+        metadata.setReview("N/A");
+        metadata.setIntegrationMiddleware(new ArrayList<>());
+        metadata.setGeneratedDate(LocalDate.now());
+        results.setMetadata(metadata);
+        return results;
+    }
+
+    private SystemDiagramDTO extractUniqueLinksAndNodes(List<SystemDependencyDTO> allDependencies) {
+        List<SystemDiagramDTO.LinkDTO> uniqueLinks = new ArrayList<>();
+        List<SystemDiagramDTO.NodeDTO> uniqueNodes = new ArrayList<>();
+        Set<String> linkIdentifiers = new HashSet<>();
+        Set<String> nodeIdentifiers = new HashSet<>();
+
+        for (SystemDependencyDTO system : allDependencies) {
+            if (system.getIntegrationFlows() != null) {
+                for (SystemDependencyDTO.IntegrationFlow flow : system.getIntegrationFlows()) {
+                    String linkId = system.getSystemCode() + "-" + flow.getCounterpartSystemCode();
+                    if (!(linkIdentifiers.contains(linkId) || linkIdentifiers.contains(flow.getCounterpartSystemCode() + "-" + system.getSystemCode()))) {
+                        linkIdentifiers.add(linkId);
+                        SystemDiagramDTO.LinkDTO link = new SystemDiagramDTO.LinkDTO();
+                        link.setSource(system.getSystemCode());
+                        link.setTarget(flow.getCounterpartSystemCode());
+                        // link.setPattern(flow.getIntegrationMethod());
+                        // link.setFrequency(flow.getFrequency());
+                        // link.setRole(flow.getCounterpartSystemRole());
+                        uniqueLinks.add(link);
+                    }
+                    if (!nodeIdentifiers.contains(system.getSystemCode())) {
+                        nodeIdentifiers.add(system.getSystemCode());
+                        SystemDiagramDTO.NodeDTO node = new SystemDiagramDTO.NodeDTO();
+                        node.setId(system.getSystemCode());
+                        node.setName(system.getSolutionOverview().getSolutionDetails().getSolutionName());
+                        node.setType(CORE_SYSTEM_TYPE);
+                        node.setCriticality(MAJOR_CRITICALITY);
+                        uniqueNodes.add(node);
+                    }
+                    if (!nodeIdentifiers.contains(flow.getCounterpartSystemCode())) {
+                        nodeIdentifiers.add(flow.getCounterpartSystemCode());
+                        SystemDiagramDTO.NodeDTO node = new SystemDiagramDTO.NodeDTO();
+                        node.setId(flow.getCounterpartSystemCode());
+                        node.setName(flow.getCounterpartSystemCode());
+                        node.setType(EXTERNAL_SYSTEM_TYPE);
+                        node.setCriticality(STANDARD_CRITICALITY);
+                        uniqueNodes.add(node);
+                    }
+                }
+            }
+        }
+
+        SystemDiagramDTO diagram = new SystemDiagramDTO();
+        diagram.setLinks(uniqueLinks);
+        diagram.setNodes(uniqueNodes);
+        return diagram;
     }
 
     /**

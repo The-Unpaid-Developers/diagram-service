@@ -16,7 +16,6 @@ public class SystemDiagramDTO {
         private String name;
         private String type;
         private String criticality;
-        private String url;
     }
     
     @Data
