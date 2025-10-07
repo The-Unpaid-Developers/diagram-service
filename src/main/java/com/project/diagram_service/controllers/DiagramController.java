@@ -2,6 +2,7 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -103,18 +104,18 @@ public class DiagramController {
      *
      * @param start the source system code to start path finding from
      * @param end the target system code to find paths to
-     * @return a {@link ResponseEntity} containing a {@link SystemDiagramDTO} with all discovered paths
+     * @return a {@link ResponseEntity} containing a {@link PathDiagramDTO} with all discovered paths
      *         visualized as a diagram, HTTP 200 on success, or HTTP 500 on internal server error
      * @throws IllegalArgumentException if either system code is invalid or systems are the same
      */
     @GetMapping("/system-dependencies/path")
-    public ResponseEntity<SystemDiagramDTO> findPathsBetweenSystems(
+    public ResponseEntity<PathDiagramDTO> findPathsBetweenSystems(
             @RequestParam String start, 
             @RequestParam String end) {
         log.info("Received request to find paths from {} to {}", start, end);
         
         try {
-            SystemDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(start, end);
+            PathDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(start, end);
             return ResponseEntity.ok(pathDiagram);
         } catch (IllegalArgumentException e) {
             log.error("Invalid request for path finding from {} to {}: {}", start, end, e.getMessage());

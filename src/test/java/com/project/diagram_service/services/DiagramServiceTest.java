@@ -3,6 +3,7 @@ package com.project.diagram_service.services;
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -737,7 +738,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(systemWithFlow));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then
         assertThat(result).isNotNull();
@@ -745,7 +746,7 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(1);
         
         // Verify direct connection
-        SystemDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002");
         assertThat(link.getPattern()).isEqualTo("REST_API");
@@ -768,31 +769,27 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(systemWithFlow));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getNodes()).hasSize(3); // SYS-001, API_GATEWAY, SYS-002
-        assertThat(result.getLinks()).hasSize(2); // SYS-001→API_GATEWAY, API_GATEWAY→SYS-002
+        assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
+        assertThat(result.getLinks()).hasSize(1); // Direct system-to-system link
+        assertThat(result.getMetadata().getCode()).isEqualTo("SYS-001 → SYS-002");
+        assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
         
-        // Verify middleware expansion
-        List<SystemDiagramDTO.LinkDTO> links = result.getLinks();
-        assertThat(links).anySatisfy(link -> {
-            assertThat(link.getSource()).isEqualTo("SYS-001");
-            assertThat(link.getTarget()).isEqualTo("API_GATEWAY");
-            assertThat(link.getPattern()).isEqualTo("REST_API");
-            assertThat(link.getFrequency()).isEqualTo("Daily");
-        });
-        
-        assertThat(links).anySatisfy(link -> {
-            assertThat(link.getSource()).isEqualTo("API_GATEWAY");
-            assertThat(link.getTarget()).isEqualTo("SYS-002");
-            assertThat(link.getPattern()).isEqualTo("REST_API");
-            assertThat(link.getFrequency()).isEqualTo("Daily");
-        });
+        // Verify the link has middleware information
+        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getSource()).isEqualTo("SYS-001");
+        assertThat(link.getTarget()).isEqualTo("SYS-002");
+        assertThat(link.getMiddleware()).isEqualTo("API_GATEWAY");
+        assertThat(link.getPattern()).isEqualTo("REST_API");
+        assertThat(link.getFrequency()).isEqualTo("Daily");
         
         // Metadata should indicate middleware used
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
+        
+        verify(coreServiceClient).getSystemDependencies();
     }
 
     @Test
@@ -810,7 +807,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
 
         // Then
         assertThat(result).isNotNull();
@@ -891,12 +888,12 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getNodes()).hasSize(3); // SYS-001, MESSAGE_QUEUE, SYS-002
-        assertThat(result.getLinks()).hasSize(3); // direct + 2 through middleware
+        assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
+        assertThat(result.getLinks()).hasSize(2); // Two direct links with different middleware
         
         // Should find both direct and middleware paths
         assertThat(result.getMetadata().getReview()).isEqualTo("2 paths found");
@@ -917,7 +914,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then - Should find path without infinite loop
         assertThat(result).isNotNull();
@@ -939,7 +936,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then - Should handle gracefully and find no paths
         assertThat(result).isNotNull();
@@ -982,12 +979,12 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3, system4));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
 
         // Then - Should find the multi-hop path
         assertThat(result).isNotNull();
-        assertThat(result.getNodes()).hasSizeGreaterThan(3); // At least SYS-001, SYS-002, SYS-003, SYS-004 + middleware
-        assertThat(result.getLinks()).hasSizeGreaterThan(3); // Multiple links in the chain
+        assertThat(result.getNodes()).hasSize(4); // SYS-001, SYS-002, SYS-003, SYS-004 (middleware stored as metadata)
+        assertThat(result.getLinks()).hasSize(3); // Direct links between systems without middleware nodes
         assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
         
         // Should include middleware in the path
@@ -1007,7 +1004,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then
         assertThat(result).isNotNull();
@@ -1030,7 +1027,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
 
         // Then - Should gracefully handle invalid roles by skipping the flow
         assertThat(result).isNotNull();
@@ -1066,7 +1063,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001_TEST", "SYS-002-PROD");
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001_TEST", "SYS-002-PROD");
 
         // Then
         assertThat(result).isNotNull();

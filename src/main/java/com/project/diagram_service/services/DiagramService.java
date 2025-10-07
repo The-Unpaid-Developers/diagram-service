@@ -3,6 +3,7 @@ package com.project.diagram_service.services;
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -16,20 +17,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Objects;
 
-/**
- * Service responsible for generating system dependency diagrams and finding paths between systems.
- * 
- * This service provides two main functionalities:
- * 1. Generating comprehensive system dependency diagrams showing integration flows
- * 2. Finding all possible paths between two systems for integration analysis
- * 
- * The service uses D3.js Sankey visualization format for diagram output and implements
- * depth-first search algorithms for path finding with loop prevention.
- * 
- * @author DiagramService Team
- * @version 1.0
- * @since 2025-10-07
- */
 @Service
 @Slf4j
 public class DiagramService {
@@ -138,10 +125,10 @@ public class DiagramService {
      *
      * @param startSystem the source system code to start path finding from
      * @param endSystem the target system code to find paths to
-     * @return diagram with all discovered paths visualized as nodes and links
+     * @return diagram with all discovered paths visualized as nodes and links with middleware as metadata
      * @throws IllegalArgumentException if either system code is invalid, systems are the same, or systems not found
      */
-    public SystemDiagramDTO findAllPathsDiagram(String startSystem, String endSystem) {
+    public PathDiagramDTO findAllPathsDiagram(String startSystem, String endSystem) {
         long startTime = System.currentTimeMillis();
         
         validatePathFindingInput(startSystem, endSystem);
@@ -163,8 +150,8 @@ public class DiagramService {
         log.info("Found {} paths from {} to {} in {}ms", 
             paths.size(), startSystem, endSystem, System.currentTimeMillis() - startTime);
         
-        // Convert paths to diagram format
-        SystemDiagramDTO diagram = convertPathsToDiagram(paths, startSystem, endSystem, allDependencies);
+        // Convert paths to diagram format with direct system-to-system links
+        PathDiagramDTO diagram = convertPathsToPathDiagram(paths, startSystem, endSystem, allDependencies);
         
         return diagram;
     }
@@ -518,12 +505,205 @@ public class DiagramService {
     }
     
     /**
+     * Converts discovered paths to PathDiagramDTO format with direct system-to-system links.
+     * 
+     * @param paths the list of discovered paths
+     * @param startSystem the source system
+     * @param endSystem the target system
+     * @param allDependencies all system dependencies
+     * @return the complete PathDiagramDTO
+     */
+    private PathDiagramDTO convertPathsToPathDiagram(List<Path> paths, String startSystem, 
+                                                   String endSystem, List<SystemDependencyDTO> allDependencies) {
+        if (paths.isEmpty()) {
+            return createEmptyPathDiagramDTO(startSystem, endSystem);
+        }
+        
+        PathDiagramComponents components = buildPathDiagramComponentsWithDirectLinks(paths, allDependencies);
+        PathDiagramDTO.MetadataDTO metadata = createPathDiagramMetadata(startSystem, endSystem, paths.size(), components.middleware());
+        
+        return assemblePathDiagram(components, metadata);
+    }
+    
+    /**
+     * Creates an empty PathDiagramDTO when no paths are found.
+     * 
+     * @param startSystem the source system
+     * @param endSystem the target system
+     * @return empty diagram with appropriate metadata
+     */
+    private PathDiagramDTO createEmptyPathDiagramDTO(String startSystem, String endSystem) {
+        log.warn("No paths found from {} to {}", startSystem, endSystem);
+        
+        PathDiagramDTO diagram = new PathDiagramDTO();
+        diagram.setNodes(List.of());
+        diagram.setLinks(List.of());
+        diagram.setMetadata(createPathDiagramMetadata(startSystem, endSystem, 0, Set.of()));
+        
+        return diagram;
+    }
+    
+    /**
+     * Creates metadata for PathDiagramDTO.
+     * 
+     * @param startSystem the source system
+     * @param endSystem the target system
+     * @param pathCount the number of paths found
+     * @param middleware the set of middleware components used
+     * @return the metadata DTO
+     */
+    private PathDiagramDTO.MetadataDTO createPathDiagramMetadata(String startSystem, String endSystem, 
+                                                               int pathCount, Set<String> middleware) {
+        PathDiagramDTO.MetadataDTO metadata = new PathDiagramDTO.MetadataDTO();
+        metadata.setCode(startSystem + PATH_SEPARATOR + endSystem);
+        metadata.setReview(formatPathCount(pathCount));
+        metadata.setIntegrationMiddleware(new ArrayList<>(middleware));
+        metadata.setGeneratedDate(LocalDate.now());
+        
+        return metadata;
+    }
+    
+    /**
      * Record to hold diagram components during construction.
      */
     private record DiagramComponents(List<SystemDiagramDTO.NodeDTO> nodes, 
                                    List<SystemDiagramDTO.LinkDTO> links, 
                                    Set<String> middleware, 
                                    Set<String> processedLinks) {}
+    
+    /**
+     * Record to hold path diagram components with direct links during construction.
+     */
+    private record PathDiagramComponents(List<PathDiagramDTO.NodeDTO> nodes, 
+                                       List<PathDiagramDTO.LinkDTO> links, 
+                                       Set<String> middleware) {}
+    
+    /**
+     * Builds path diagram components with direct system-to-system links.
+     * 
+     * @param paths the discovered paths
+     * @param allDependencies all system dependencies
+     * @return path diagram components
+     */
+    private PathDiagramComponents buildPathDiagramComponentsWithDirectLinks(List<Path> paths, 
+                                                                          List<SystemDependencyDTO> allDependencies) {
+        Set<String> allSystemsInPaths = new HashSet<>();
+        Set<String> middlewareNames = new HashSet<>();
+        List<PathDiagramDTO.LinkDTO> links = new ArrayList<>();
+        
+        // Process all path segments to create direct system-to-system links
+        for (Path path : paths) {
+            processPathForDirectLinks(path, allSystemsInPaths, middlewareNames, links);
+        }
+        
+        // Create nodes only for systems (not middleware)
+        List<PathDiagramDTO.NodeDTO> nodes = createPathNodes(allSystemsInPaths, allDependencies);
+        
+        return new PathDiagramComponents(nodes, links, middlewareNames);
+    }
+    
+    /**
+     * Assembles the final PathDiagramDTO from components and metadata.
+     * 
+     * @param components the path diagram components
+     * @param metadata the diagram metadata
+     * @return the complete PathDiagramDTO
+     */
+    private PathDiagramDTO assemblePathDiagram(PathDiagramComponents components, PathDiagramDTO.MetadataDTO metadata) {
+        PathDiagramDTO diagram = new PathDiagramDTO();
+        diagram.setNodes(components.nodes());
+        diagram.setLinks(components.links());
+        diagram.setMetadata(metadata);
+        return diagram;
+    }
+    
+    /**
+     * Processes a path to create direct system-to-system links with middleware as metadata.
+     * 
+     * @param path the path to process
+     * @param allSystemsInPaths set to collect all system IDs
+     * @param middlewareNames set to collect middleware names
+     * @param links list to collect created links
+     */
+    private void processPathForDirectLinks(Path path, Set<String> allSystemsInPaths, 
+                                         Set<String> middlewareNames, List<PathDiagramDTO.LinkDTO> links) {
+        for (PathSegment segment : path.segments()) {
+            String source = segment.source();
+            String target = segment.target();
+            String middleware = segment.middleware();
+            SystemDependencyDTO.IntegrationFlow originalFlow = segment.originalFlow();
+            
+            allSystemsInPaths.add(source);
+            allSystemsInPaths.add(target);
+            
+            if (hasValidMiddleware(middleware)) {
+                middlewareNames.add(normalizeNodeId(middleware));
+            }
+            
+            // Create direct system-to-system link with middleware as metadata
+            PathDiagramDTO.LinkDTO link = createPathDiagramLink(source, target, originalFlow);
+            links.add(link);
+        }
+    }
+    
+    /**
+     * Creates nodes for systems in paths.
+     * 
+     * @param allSystemsInPaths all system IDs found in paths
+     * @param allDependencies all system dependencies
+     * @return list of created path nodes
+     */
+    private List<PathDiagramDTO.NodeDTO> createPathNodes(Set<String> allSystemsInPaths, 
+                                                        List<SystemDependencyDTO> allDependencies) {
+        List<PathDiagramDTO.NodeDTO> nodes = new ArrayList<>();
+        
+        for (String systemId : allSystemsInPaths) {
+            PathDiagramDTO.NodeDTO node = createPathDiagramNode(systemId, allDependencies);
+            nodes.add(node);
+        }
+        
+        return nodes;
+    }
+    
+    /**
+     * Creates a PathDiagramDTO link with middleware as metadata.
+     * 
+     * @param source the source system
+     * @param target the target system
+     * @param flow the integration flow
+     * @return the created link DTO
+     */
+    private PathDiagramDTO.LinkDTO createPathDiagramLink(String source, String target,
+                                                        SystemDependencyDTO.IntegrationFlow flow) {
+        PathDiagramDTO.LinkDTO link = new PathDiagramDTO.LinkDTO();
+        link.setSource(source);
+        link.setTarget(target);
+        link.setPattern(flow.getIntegrationMethod());
+        link.setFrequency(flow.getFrequency());
+        link.setRole(flow.getCounterpartSystemRole());
+        link.setMiddleware(hasValidMiddleware(flow.getMiddleware()) ? flow.getMiddleware() : null);
+        return link;
+    }
+    
+    /**
+     * Creates a PathDiagramDTO node for a system.
+     * 
+     * @param systemId the system ID
+     * @param allDependencies all system dependencies
+     * @return the created node DTO
+     */
+    private PathDiagramDTO.NodeDTO createPathDiagramNode(String systemId, List<SystemDependencyDTO> allDependencies) {
+        PathDiagramDTO.NodeDTO node = new PathDiagramDTO.NodeDTO();
+        node.setId(systemId);
+        
+        String systemName = findSystemNameFromDependencies(systemId, allDependencies);
+        node.setName(systemName);
+        node.setType(determineSystemType(systemId, allDependencies));
+        node.setCriticality(MAJOR_CRITICALITY);
+        node.setUrl(systemId + JSON_EXTENSION);
+        
+        return node;
+    }
     
     /**
      * Finds the primary system in the dependencies list.

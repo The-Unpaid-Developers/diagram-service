@@ -2,6 +2,7 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +35,7 @@ class DiagramControllerTest {
 
     private List<SystemDependencyDTO> mockSystemDependencies;
     private SystemDiagramDTO mockSystemDiagram;
+    private PathDiagramDTO mockPathDiagram;
 
     @BeforeEach
     void setUp() {
@@ -78,6 +80,40 @@ class DiagramControllerTest {
         mockSystemDiagram.setNodes(Arrays.asList(node1, node2));
         mockSystemDiagram.setLinks(Arrays.asList(link));
         mockSystemDiagram.setMetadata(metadata);
+        
+        // Setup mock path diagram
+        mockPathDiagram = new PathDiagramDTO();
+        PathDiagramDTO.NodeDTO pathNode1 = new PathDiagramDTO.NodeDTO();
+        pathNode1.setId("SYS-001");
+        pathNode1.setName("System One");
+        pathNode1.setType("Core System");
+        pathNode1.setCriticality("Major");
+        pathNode1.setUrl("SYS-001.json");
+
+        PathDiagramDTO.NodeDTO pathNode2 = new PathDiagramDTO.NodeDTO();
+        pathNode2.setId("SYS-002");
+        pathNode2.setName("System Two");
+        pathNode2.setType("IncomeSystem");
+        pathNode2.setCriticality("Major");
+        pathNode2.setUrl("SYS-002.json");
+
+        PathDiagramDTO.LinkDTO pathLink = new PathDiagramDTO.LinkDTO();
+        pathLink.setSource("SYS-001");
+        pathLink.setTarget("SYS-002");
+        pathLink.setPattern("REST_API");
+        pathLink.setFrequency("Daily");
+        pathLink.setRole("CONSUMER");
+        pathLink.setMiddleware("API_GATEWAY");
+
+        PathDiagramDTO.MetadataDTO pathMetadata = new PathDiagramDTO.MetadataDTO();
+        pathMetadata.setCode("SYS-001 → SYS-002");
+        pathMetadata.setReview("1 path found");
+        pathMetadata.setIntegrationMiddleware(Arrays.asList("API_GATEWAY"));
+        pathMetadata.setGeneratedDate(java.time.LocalDate.of(2025, 10, 7));
+
+        mockPathDiagram.setNodes(Arrays.asList(pathNode1, pathNode2));
+        mockPathDiagram.setLinks(Arrays.asList(pathLink));
+        mockPathDiagram.setMetadata(pathMetadata);
     }
 
     @Test
@@ -343,11 +379,11 @@ class DiagramControllerTest {
         verify(diagramService).getSystemDependencies();
     }
     
-    @Test
+        @Test
     @DisplayName("Should successfully find paths between two systems")
     void testGetPathsBetweenSystems_Success() throws Exception {
         // Arrange
-        when(diagramService.findAllPathsDiagram("SYS-001", "SYS-002")).thenReturn(mockSystemDiagram);
+        when(diagramService.findAllPathsDiagram("SYS-001", "SYS-002")).thenReturn(mockPathDiagram);
 
         // Act & Assert
         mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
@@ -358,8 +394,10 @@ class DiagramControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.nodes").isArray())
+                .andExpect(jsonPath("$.nodes.length()").value(2))
                 .andExpect(jsonPath("$.links").isArray())
-                .andExpect(jsonPath("$.metadata").exists());
+                .andExpect(jsonPath("$.links.length()").value(1))
+                .andExpect(jsonPath("$.links[0].middleware").value("API_GATEWAY"));
 
         verify(diagramService).findAllPathsDiagram("SYS-001", "SYS-002");
     }
