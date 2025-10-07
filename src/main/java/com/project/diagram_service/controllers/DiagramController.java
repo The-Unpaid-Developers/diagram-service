@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
@@ -100,26 +101,26 @@ public class DiagramController {
      *   Multi-hop paths through intermediate systems
      *   Producer-consumer relationships and data flow direction
      *
-     * @param startSystem the source system code to start path finding from
-     * @param endSystem the target system code to find paths to
+     * @param start the source system code to start path finding from
+     * @param end the target system code to find paths to
      * @return a {@link ResponseEntity} containing a {@link SystemDiagramDTO} with all discovered paths
      *         visualized as a diagram, HTTP 200 on success, or HTTP 500 on internal server error
      * @throws IllegalArgumentException if either system code is invalid or systems are the same
      */
-    @GetMapping("/paths/{startSystem}/to/{endSystem}")
+    @GetMapping("/system-dependencies/path")
     public ResponseEntity<SystemDiagramDTO> findPathsBetweenSystems(
-            @PathVariable String startSystem, 
-            @PathVariable String endSystem) {
-        log.info("Received request to find paths from {} to {}", startSystem, endSystem);
+            @RequestParam String start, 
+            @RequestParam String end) {
+        log.info("Received request to find paths from {} to {}", start, end);
         
         try {
-            SystemDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(startSystem, endSystem);
+            SystemDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(start, end);
             return ResponseEntity.ok(pathDiagram);
         } catch (IllegalArgumentException e) {
-            log.error("Invalid request for path finding from {} to {}: {}", startSystem, endSystem, e.getMessage());
+            log.error("Invalid request for path finding from {} to {}: {}", start, end, e.getMessage());
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            log.error("Error finding paths from {} to {}: {}", startSystem, endSystem, e.getMessage());
+            log.error("Error finding paths from {} to {}: {}", start, end, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

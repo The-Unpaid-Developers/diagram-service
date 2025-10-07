@@ -350,7 +350,9 @@ class DiagramControllerTest {
         when(diagramService.findAllPathsDiagram("SYS-001", "SYS-002")).thenReturn(mockSystemDiagram);
 
         // Act & Assert
-        mockMvc.perform(get("/api/v1/diagram/paths/SYS-001/to/SYS-002")
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "SYS-001")
+                        .param("end", "SYS-002")
                         .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())
@@ -370,7 +372,9 @@ class DiagramControllerTest {
                 .thenThrow(new IllegalArgumentException("Start system cannot be null or empty"));
 
         // Act & Assert
-        mockMvc.perform(get("/api/v1/diagram/paths/{startSystem}/to/{endSystem}", "INVALID", "SYS-002")
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "INVALID")
+                        .param("end", "SYS-002")
                         .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isBadRequest());
@@ -386,7 +390,9 @@ class DiagramControllerTest {
                 .thenThrow(new IllegalArgumentException("End system cannot be null or empty"));
 
         // Act & Assert
-        mockMvc.perform(get("/api/v1/diagram/paths/{startSystem}/to/{endSystem}", "SYS-001", "INVALID")
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "SYS-001")
+                        .param("end", "INVALID")
                         .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isBadRequest());
@@ -402,7 +408,9 @@ class DiagramControllerTest {
                 .thenThrow(new IllegalArgumentException("Start and end systems cannot be the same"));
 
         // Act & Assert
-        mockMvc.perform(get("/api/v1/diagram/paths/SYS-001/to/SYS-001")
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "SYS-001")
+                        .param("end", "SYS-001")
                         .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isBadRequest());
@@ -418,7 +426,9 @@ class DiagramControllerTest {
                 .thenThrow(new IllegalArgumentException("Start system 'NONEXISTENT' not found"));
 
         // Act & Assert
-        mockMvc.perform(get("/api/v1/diagram/paths/NONEXISTENT/to/SYS-002")
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "NONEXISTENT")
+                        .param("end", "SYS-002")
                         .accept(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isBadRequest());
