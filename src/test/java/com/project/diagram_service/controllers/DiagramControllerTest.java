@@ -342,4 +342,87 @@ class DiagramControllerTest {
 
         verify(diagramService).getSystemDependencies();
     }
+    
+    @Test
+    @DisplayName("Should successfully find paths between two systems")
+    void testGetPathsBetweenSystems_Success() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("SYS-001", "SYS-002")).thenReturn(mockSystemDiagram);
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/paths/SYS-001/to/SYS-002")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.nodes").isArray())
+                .andExpect(jsonPath("$.links").isArray())
+                .andExpect(jsonPath("$.metadata").exists());
+
+        verify(diagramService).findAllPathsDiagram("SYS-001", "SYS-002");
+    }
+    
+    @Test
+    @DisplayName("Should return bad request when start system is invalid")
+    void testGetPathsBetweenSystems_InvalidStartSystem() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("INVALID", "SYS-002"))
+                .thenThrow(new IllegalArgumentException("Start system cannot be null or empty"));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/paths/{startSystem}/to/{endSystem}", "INVALID", "SYS-002")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest());
+
+        verify(diagramService).findAllPathsDiagram("INVALID", "SYS-002");
+    }
+    
+    @Test
+    @DisplayName("Should return bad request when end system is invalid")
+    void testGetPathsBetweenSystems_InvalidEndSystem() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("SYS-001", "INVALID"))
+                .thenThrow(new IllegalArgumentException("End system cannot be null or empty"));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/paths/{startSystem}/to/{endSystem}", "SYS-001", "INVALID")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest());
+
+        verify(diagramService).findAllPathsDiagram("SYS-001", "INVALID");
+    }
+    
+    @Test
+    @DisplayName("Should return bad request when start and end systems are the same")
+    void testGetPathsBetweenSystems_SameSystems() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("SYS-001", "SYS-001"))
+                .thenThrow(new IllegalArgumentException("Start and end systems cannot be the same"));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/paths/SYS-001/to/SYS-001")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest());
+
+        verify(diagramService).findAllPathsDiagram("SYS-001", "SYS-001");
+    }
+    
+    @Test
+    @DisplayName("Should return not found when system doesn't exist")
+    void testGetPathsBetweenSystems_SystemNotFound() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("NONEXISTENT", "SYS-002"))
+                .thenThrow(new IllegalArgumentException("Start system 'NONEXISTENT' not found"));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/paths/NONEXISTENT/to/SYS-002")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest());
+
+        verify(diagramService).findAllPathsDiagram("NONEXISTENT", "SYS-002");
+    }
 }

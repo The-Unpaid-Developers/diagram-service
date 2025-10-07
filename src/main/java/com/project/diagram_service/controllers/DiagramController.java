@@ -81,4 +81,46 @@ public class DiagramController {
             return ResponseEntity.internalServerError().build();
         }
     }
+    
+    /**
+     * Finds all integration paths between two systems and returns them as a diagram.
+     *
+     * This endpoint performs path finding analysis to discover all possible integration
+     * routes between a source and target system. It uses depth-first search with loop
+     * prevention to identify both direct connections and paths through intermediate systems.
+     *
+     * The generated diagram includes:
+     *   All systems and middleware components in the discovered paths
+     *   Integration links showing data flow patterns and frequencies
+     *   Path metadata including route information and middleware usage
+     *
+     * Path finding considers:
+     *   Direct system-to-system integration flows
+     *   Paths through middleware components (API gateways, message brokers, etc.)
+     *   Multi-hop paths through intermediate systems
+     *   Producer-consumer relationships and data flow direction
+     *
+     * @param startSystem the source system code to start path finding from
+     * @param endSystem the target system code to find paths to
+     * @return a {@link ResponseEntity} containing a {@link SystemDiagramDTO} with all discovered paths
+     *         visualized as a diagram, HTTP 200 on success, or HTTP 500 on internal server error
+     * @throws IllegalArgumentException if either system code is invalid or systems are the same
+     */
+    @GetMapping("/paths/{startSystem}/to/{endSystem}")
+    public ResponseEntity<SystemDiagramDTO> findPathsBetweenSystems(
+            @PathVariable String startSystem, 
+            @PathVariable String endSystem) {
+        log.info("Received request to find paths from {} to {}", startSystem, endSystem);
+        
+        try {
+            SystemDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(startSystem, endSystem);
+            return ResponseEntity.ok(pathDiagram);
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid request for path finding from {} to {}: {}", startSystem, endSystem, e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            log.error("Error finding paths from {} to {}: {}", startSystem, endSystem, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }
