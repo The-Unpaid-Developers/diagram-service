@@ -1,7 +1,7 @@
 package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
-import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,7 +34,7 @@ class DiagramControllerTest {
     private DiagramService diagramService;
 
     private List<SystemDependencyDTO> mockSystemDependencies;
-    private SystemDiagramDTO mockSystemDiagram;
+    private SpecificSystemDependenciesDiagramDTO mockSystemDiagram;
     private PathDiagramDTO mockPathDiagram;
 
     @BeforeEach
@@ -49,27 +49,27 @@ class DiagramControllerTest {
         mockSystemDependencies = Arrays.asList(dependency1, dependency2);
 
         // Setup mock diagram
-        mockSystemDiagram = new SystemDiagramDTO();
-        SystemDiagramDTO.NodeDTO node1 = new SystemDiagramDTO.NodeDTO();
+        mockSystemDiagram = new SpecificSystemDependenciesDiagramDTO();
+        SpecificSystemDependenciesDiagramDTO.NodeDTO node1 = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         node1.setId("SYS-001");
         node1.setName("System One");
         node1.setType("Core System");
         node1.setCriticality("Major");
 
-        SystemDiagramDTO.NodeDTO node2 = new SystemDiagramDTO.NodeDTO();
+        SpecificSystemDependenciesDiagramDTO.NodeDTO node2 = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         node2.setId("SYS-002-C");
         node2.setName("System Two");
         node2.setType("IncomeSystem");
         node2.setCriticality("Major");
 
-        SystemDiagramDTO.LinkDTO link = new SystemDiagramDTO.LinkDTO();
+        SpecificSystemDependenciesDiagramDTO.LinkDTO link = new SpecificSystemDependenciesDiagramDTO.LinkDTO();
         link.setSource("SYS-001");
         link.setTarget("SYS-002-C");
         link.setPattern("REST_API");
         link.setFrequency("Daily");
         link.setRole("CONSUMER");
 
-        SystemDiagramDTO.MetadataDTO metadata = new SystemDiagramDTO.MetadataDTO();
+        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
         metadata.setCode("SYS-001");
         metadata.setReview("REV-001");
         metadata.setIntegrationMiddleware(Collections.emptyList());
@@ -223,12 +223,12 @@ class DiagramControllerTest {
     void testGetSystemDependenciesDiagram_NoLinks() throws Exception {
         // Given
         String systemCode = "SYS-ISOLATED";
-        SystemDiagramDTO diagramWithNoLinks = new SystemDiagramDTO();
-        SystemDiagramDTO.NodeDTO singleNode = new SystemDiagramDTO.NodeDTO();
+        SpecificSystemDependenciesDiagramDTO diagramWithNoLinks = new SpecificSystemDependenciesDiagramDTO();
+        SpecificSystemDependenciesDiagramDTO.NodeDTO singleNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         singleNode.setId("SYS-ISOLATED");
         singleNode.setName("Isolated System");
         
-        SystemDiagramDTO.MetadataDTO metadata = new SystemDiagramDTO.MetadataDTO();
+        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
         metadata.setCode("SYS-ISOLATED");
         
         diagramWithNoLinks.setNodes(Arrays.asList(singleNode));

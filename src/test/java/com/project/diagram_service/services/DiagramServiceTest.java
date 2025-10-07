@@ -2,7 +2,7 @@ package com.project.diagram_service.services;
 
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
-import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -88,7 +88,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -98,19 +98,19 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
         
         // Verify primary system node
-        SystemDiagramDTO.NodeDTO primaryNode = findNodeById(result.getNodes(), "SYS-001");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO primaryNode = findNodeById(result.getNodes(), "SYS-001");
         assertThat(primaryNode).isNotNull();
         assertThat(primaryNode.getName()).isEqualTo("Primary System");
         assertThat(primaryNode.getType()).isEqualTo("Core System");
         
         // Verify external system node (with consumer suffix)
-        SystemDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-002-C");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-002-C");
         assertThat(externalNode).isNotNull();
         assertThat(externalNode.getName()).isEqualTo("External System");
         assertThat(externalNode.getType()).isEqualTo("IncomeSystem");
         
         // Verify link
-        SystemDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        SpecificSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002-C");
         assertThat(link.getPattern()).isEqualTo("REST_API");
@@ -130,7 +130,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -138,7 +138,7 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Two middleware links
         
         // Verify middleware node
-        SystemDiagramDTO.NodeDTO middlewareNode = findNodeById(result.getNodes(), "API_GATEWAY-C");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = findNodeById(result.getNodes(), "API_GATEWAY-C");
         assertThat(middlewareNode).isNotNull();
         assertThat(middlewareNode.getName()).isEqualTo("API_GATEWAY");
         assertThat(middlewareNode.getType()).isEqualTo("Middleware");
@@ -148,7 +148,7 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY-C");
         
         // Verify links
-        List<SystemDiagramDTO.LinkDTO> links = result.getLinks();
+        List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links = result.getLinks();
         assertThat(links).anyMatch(link -> 
             "SYS-001".equals(link.getSource()) && "API_GATEWAY-C".equals(link.getTarget()));
         assertThat(links).anyMatch(link -> 
@@ -176,7 +176,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -184,14 +184,14 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Two direct links
         
         // Verify external system nodes with different roles
-        SystemDiagramDTO.NodeDTO externalConsumerNode = findNodeById(result.getNodes(), "SYS-002-C");
-        SystemDiagramDTO.NodeDTO externalProducerNode = findNodeById(result.getNodes(), "SYS-002-P");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO externalConsumerNode = findNodeById(result.getNodes(), "SYS-002-C");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO externalProducerNode = findNodeById(result.getNodes(), "SYS-002-P");
         
         assertThat(externalConsumerNode).isNotNull();
         assertThat(externalProducerNode).isNotNull();
         
         // Verify links
-        List<SystemDiagramDTO.LinkDTO> links = result.getLinks();
+        List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links = result.getLinks();
         assertThat(links).anyMatch(link -> 
             "SYS-001".equals(link.getSource()) && "SYS-002-C".equals(link.getTarget()));
         assertThat(links).anyMatch(link -> 
@@ -211,13 +211,13 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
         
         // Verify external system node (not in our data)
-        SystemDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-999-C");
+        SpecificSystemDependenciesDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-999-C");
         assertThat(externalNode).isNotNull();
         assertThat(externalNode.getName()).isEqualTo("SYS-999"); // Uses system code as name
         assertThat(externalNode.getType()).isEqualTo("External"); // External type since not in our data
@@ -236,7 +236,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -269,7 +269,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -289,7 +289,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -309,7 +309,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(systemsWithNullFlows);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -354,13 +354,13 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(systemsWithEmptyFlows);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getNodes()).hasSize(1);
         assertThat(result.getLinks()).isEmpty();
-        SystemDiagramDTO.NodeDTO coreNode = result.getNodes().get(0);
+        SpecificSystemDependenciesDiagramDTO.NodeDTO coreNode = result.getNodes().get(0);
         assertThat(coreNode.getId()).isEqualTo(targetSystemCode);
         assertThat(coreNode.getType()).isEqualTo("Core System");
     }
@@ -376,7 +376,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -400,7 +400,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(mockSystemDependencies);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -472,7 +472,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(complexSystems);
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -481,7 +481,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSizeGreaterThan(5);
         
         // Should have multiple middleware types
-        List<SystemDiagramDTO.NodeDTO> middlewareNodes = result.getNodes().stream()
+        List<SpecificSystemDependenciesDiagramDTO.NodeDTO> middlewareNodes = result.getNodes().stream()
             .filter(node -> "Middleware".equals(node.getType()))
             .toList();
         assertThat(middlewareNodes).hasSizeGreaterThanOrEqualTo(3);
@@ -538,7 +538,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(systemWithMissingDep));
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -548,7 +548,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         
         // Find the consumer node - should use system code as name when data not found
-        SystemDiagramDTO.NodeDTO consumerNode = result.getNodes().stream()
+        SpecificSystemDependenciesDiagramDTO.NodeDTO consumerNode = result.getNodes().stream()
             .filter(node -> node.getId().equals("SYS-999-C"))
             .findFirst()
             .orElse(null);
@@ -571,7 +571,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalProducer));
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -619,14 +619,14 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
 
         // Then
         assertThat(result).isNotNull();
         
         // Should not have duplicate nodes for the same system with same role
         List<String> nodeIds = result.getNodes().stream()
-            .map(SystemDiagramDTO.NodeDTO::getId)
+            .map(SpecificSystemDependenciesDiagramDTO.NodeDTO::getId)
             .toList();
         assertThat(nodeIds).doesNotHaveDuplicates();
         
@@ -661,7 +661,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, system1, system2));
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -702,7 +702,7 @@ class DiagramServiceTest {
         when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem2));
 
         // When
-        SystemDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
 
         // Then
         assertThat(result).isNotNull();
@@ -719,7 +719,7 @@ class DiagramServiceTest {
         assertThat(hasConsumerLink).isTrue();
     }
 
-    private SystemDiagramDTO.NodeDTO findNodeById(List<SystemDiagramDTO.NodeDTO> nodes, String id) {
+    private SpecificSystemDependenciesDiagramDTO.NodeDTO findNodeById(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String id) {
         return nodes.stream()
             .filter(node -> id.equals(node.getId()))
             .findFirst()

@@ -1,7 +1,8 @@
 package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
-import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
+import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import lombok.extern.slf4j.Slf4j;
@@ -67,16 +68,16 @@ public class DiagramController {
      * and outgoing dependencies (systems that the target system depends on).
      *
      * @param systemCode the unique identifier of the system to generate the diagram for
-     * @return a {@link ResponseEntity} containing a {@link SystemDiagramDTO} with the complete diagram
+     * @return a {@link ResponseEntity} containing a {@link SpecificSystemDependenciesDiagramDTO} with the complete diagram
      *         structure, HTTP 200 on success, or HTTP 500 on internal server error
      * @throws RuntimeException if the specified system code is not found
      */
     @GetMapping("/system-dependencies/{systemCode}")
-    public ResponseEntity<SystemDiagramDTO> getSystemDependenciesDiagram(@PathVariable String systemCode) {
+    public ResponseEntity<SpecificSystemDependenciesDiagramDTO> getSystemDependenciesDiagram(@PathVariable String systemCode) {
         log.info("Received request for system dependencies diagram for system: {}", systemCode);
         
         try {
-            SystemDiagramDTO diagram = diagramService.generateSystemDependenciesDiagram(systemCode);
+            SpecificSystemDependenciesDiagramDTO diagram = diagramService.generateSystemDependenciesDiagram(systemCode);
             return ResponseEntity.ok(diagram);
         } catch (Exception e) {
             log.error("Error generating system dependencies diagram for {}: {}", systemCode, e.getMessage());
@@ -85,11 +86,11 @@ public class DiagramController {
     }
 
     @GetMapping("/system-dependencies/all")
-    public ResponseEntity<SystemDiagramDTO> getAllSystemDependenciesDiagrams() {
+    public ResponseEntity<OverallSystemDependenciesDiagramDTO> getAllSystemDependenciesDiagrams() {
         log.info("Received request for all system dependencies diagrams");
         
         try {
-            SystemDiagramDTO diagram = diagramService.generateAllSystemDependenciesDiagrams();
+            OverallSystemDependenciesDiagramDTO diagram = diagramService.generateAllSystemDependenciesDiagrams();
             return ResponseEntity.ok(diagram);
         } catch (Exception e) {
             log.error("Error generating all system dependencies diagrams: {}", e.getMessage());
