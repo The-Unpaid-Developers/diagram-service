@@ -2,12 +2,14 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
@@ -78,6 +80,48 @@ public class DiagramController {
             return ResponseEntity.ok(diagram);
         } catch (Exception e) {
             log.error("Error generating system dependencies diagram for {}: {}", systemCode, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * Finds all integration paths between two systems and returns them as a diagram.
+     *
+     * This endpoint performs path finding analysis to discover all possible integration
+     * routes between a source and target system. It uses depth-first search with loop
+     * prevention to identify both direct connections and paths through intermediate systems.
+     *
+     * The generated diagram includes:
+     *   All systems and middleware components in the discovered paths
+     *   Integration links showing data flow patterns and frequencies
+     *   Path metadata including route information and middleware usage
+     *
+     * Path finding considers:
+     *   Direct system-to-system integration flows
+     *   Paths through middleware components (API gateways, message brokers, etc.)
+     *   Multi-hop paths through intermediate systems
+     *   Producer-consumer relationships and data flow direction
+     *
+     * @param start the source system code to start path finding from
+     * @param end the target system code to find paths to
+     * @return a {@link ResponseEntity} containing a {@link PathDiagramDTO} with all discovered paths
+     *         visualized as a diagram, HTTP 200 on success, or HTTP 500 on internal server error
+     * @throws IllegalArgumentException if either system code is invalid or systems are the same
+     */
+    @GetMapping("/system-dependencies/path")
+    public ResponseEntity<PathDiagramDTO> findPathsBetweenSystems(
+            @RequestParam String start, 
+            @RequestParam String end) {
+        log.info("Received request to find paths from {} to {}", start, end);
+        
+        try {
+            PathDiagramDTO pathDiagram = diagramService.findAllPathsDiagram(start, end);
+            return ResponseEntity.ok(pathDiagram);
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid request for path finding from {} to {}: {}", start, end, e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            log.error("Error finding paths from {} to {}: {}", start, end, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

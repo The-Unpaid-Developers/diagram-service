@@ -3,6 +3,7 @@ package com.project.diagram_service.services;
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.PathDiagramDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -723,5 +724,351 @@ class DiagramServiceTest {
             .filter(node -> id.equals(node.getId()))
             .findFirst()
             .orElse(null);
+    }
+
+    // Tests for findAllPathsDiagram method
+    @Test
+    @DisplayName("Should find single direct path between systems")
+    void testFindAllPathsDiagram_SingleDirectPath() {
+        // Given: SYS-001 → SYS-002 (direct connection)
+        SystemDependencyDTO systemWithFlow = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        systemWithFlow.setIntegrationFlows(Arrays.asList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(systemWithFlow));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1);
+        
+        // Verify direct connection
+        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getSource()).isEqualTo("SYS-001");
+        assertThat(link.getTarget()).isEqualTo("SYS-002");
+        assertThat(link.getPattern()).isEqualTo("REST_API");
+        assertThat(link.getFrequency()).isEqualTo("Daily");
+        assertThat(link.getRole()).isEqualTo("CONSUMER");
+        
+        // Metadata should indicate 1 path found
+        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should find path through middleware")
+    void testFindAllPathsDiagram_PathThroughMiddleware() {
+        // Given: SYS-001 → SYS-002 via API_GATEWAY
+        SystemDependencyDTO systemWithFlow = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        systemWithFlow.setIntegrationFlows(Arrays.asList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(systemWithFlow));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
+        assertThat(result.getLinks()).hasSize(1); // Direct system-to-system link
+        assertThat(result.getMetadata().getCode()).isEqualTo("SYS-001 → SYS-002");
+        assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
+        
+        // Verify the link has middleware information
+        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getSource()).isEqualTo("SYS-001");
+        assertThat(link.getTarget()).isEqualTo("SYS-002");
+        assertThat(link.getMiddleware()).isEqualTo("API_GATEWAY");
+        assertThat(link.getPattern()).isEqualTo("REST_API");
+        assertThat(link.getFrequency()).isEqualTo("Daily");
+        
+        // Metadata should indicate middleware used
+        assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle no paths found scenario")
+    void testFindAllPathsDiagram_NoPathsFound() {
+        // Given: No connection between systems
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-003", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-004", "System Four", "REV-004");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty();
+        assertThat(result.getLinks()).isEmpty();
+        assertThat(result.getMetadata().getReview()).isEqualTo("No paths found");
+    }
+
+    @Test
+    @DisplayName("Should validate input parameters for path finding")
+    void testFindAllPathsDiagram_InputValidation() {
+        // Test same start and end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "SYS-001"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start and end systems cannot be the same");
+
+        // Test null start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram(null, "SYS-002"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start system cannot be null or empty");
+
+        // Test null end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("End system cannot be null or empty");
+
+        // Test empty start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("", "SYS-002"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start system cannot be null or empty");
+
+        // Test empty end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", ""))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("End system cannot be null or empty");
+
+        // Test whitespace-only start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("   ", "SYS-002"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start system cannot be null or empty");
+
+        // Test whitespace-only end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "   "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("End system cannot be null or empty");
+    }
+
+    @Test
+    @DisplayName("Should handle nonexistent systems")
+    void testFindAllPathsDiagram_NonExistentSystems() {
+        // Given
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system.setIntegrationFlows(Arrays.asList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When/Then - Nonexistent start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("NONEXISTENT", "SYS-002"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start system 'NONEXISTENT' not found");
+
+        // When/Then - Nonexistent end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "NONEXISTENT"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("End system 'NONEXISTENT' not found");
+    }
+
+    @Test
+    @DisplayName("Should find multiple paths between systems")
+    void testFindAllPathsDiagram_MultiplePaths() {
+        // Given: SYS-001 → SYS-002 via multiple routes
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow directFlow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow middlewareFlow = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
+        system.setIntegrationFlows(Arrays.asList(directFlow, middlewareFlow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
+        assertThat(result.getLinks()).hasSize(2); // Two direct links with different middleware
+        
+        // Should find both direct and middleware paths
+        assertThat(result.getMetadata().getReview()).isEqualTo("2 paths found");
+    }
+
+    @Test
+    @DisplayName("Should prevent circular dependencies in path finding")
+    void testFindAllPathsDiagram_CircularDependencyPrevention() {
+        // Given: Circular dependency scenario
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-001", "CONSUMER", "REST_API", "Daily", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then - Should find path without infinite loop
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1);
+        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+    }
+
+    @Test
+    @DisplayName("Should handle systems with null integration flows")
+    void testFindAllPathsDiagram_NullIntegrationFlows() {
+        // Given: System with null integration flows
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        system1.setIntegrationFlows(null); // Explicitly set to null
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(null); // Explicitly set to null
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then - Should handle gracefully and find no paths
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty();
+        assertThat(result.getLinks()).isEmpty();
+        assertThat(result.getMetadata().getReview()).isEqualTo("No paths found");
+    }
+
+    @Test
+    @DisplayName("Should handle empty system dependencies list")
+    void testFindAllPathsDiagram_EmptyDependencies() {
+        // Given: Empty dependencies list
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Collections.emptyList());
+
+        // When/Then - Should throw exception for nonexistent systems
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "SYS-002"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Start system 'SYS-001' not found");
+    }
+
+    @Test
+    @DisplayName("Should handle complex multi-hop path scenarios")
+    void testFindAllPathsDiagram_ComplexMultiHopPaths() {
+        // Given: Complex chain SYS-001 → SYS-002 → SYS-003 → SYS-004
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-003", "CONSUMER", "MESSAGING", "Hourly", "API_GATEWAY");
+        system2.setIntegrationFlows(Arrays.asList(flow2));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System Three", "REV-003");
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-004", "CONSUMER", "FILE_TRANSFER", "Weekly", null);
+        system3.setIntegrationFlows(Arrays.asList(flow3));
+        
+        SystemDependencyDTO system4 = createSystemDependency("SYS-004", "System Four", "REV-004");
+        system4.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3, system4));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
+
+        // Then - Should find the multi-hop path
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(4); // SYS-001, SYS-002, SYS-003, SYS-004 (middleware stored as metadata)
+        assertThat(result.getLinks()).hasSize(3); // Direct links between systems without middleware nodes
+        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+        
+        // Should include middleware in the path
+        assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
+    }
+
+    @Test
+    @DisplayName("Should handle systems with empty integration flows list")
+    void testFindAllPathsDiagram_EmptyIntegrationFlows() {
+        // Given: Systems with empty (not null) integration flows
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        system1.setIntegrationFlows(Collections.emptyList());
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty();
+        assertThat(result.getLinks()).isEmpty();
+        assertThat(result.getMetadata().getReview()).isEqualTo("No paths found");
+    }
+
+    @Test
+    @DisplayName("Should handle invalid counterpart system roles")
+    void testFindAllPathsDiagram_InvalidCounterpartRoles() {
+        // Given: Integration flow with invalid/unknown role
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow invalidFlow = createIntegrationFlow("SYS-002", "INVALID_ROLE", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(invalidFlow));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then - Should gracefully handle invalid roles by skipping the flow
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty();
+        assertThat(result.getLinks()).isEmpty();
+        assertThat(result.getMetadata().getReview()).isEqualTo("No paths found");
+    }
+
+    @Test
+    @DisplayName("Should handle CoreServiceClient exceptions")
+    void testFindAllPathsDiagram_CoreServiceException() {
+        // Given: CoreServiceClient throws exception
+        when(coreServiceClient.getSystemDependencies())
+                .thenThrow(new RuntimeException("Service unavailable"));
+
+        // When/Then - Exception should propagate
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "SYS-002"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Service unavailable");
+    }
+
+    @Test
+    @DisplayName("Should handle path finding with system codes containing special characters")
+    void testFindAllPathsDiagram_SpecialCharactersInSystemCodes() {
+        // Given: System codes with special characters
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001_TEST", "System One Test", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow("SYS-002-PROD", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002-PROD", "System Two Production", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001_TEST", "SYS-002-PROD");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1);
+        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
     }
 }
