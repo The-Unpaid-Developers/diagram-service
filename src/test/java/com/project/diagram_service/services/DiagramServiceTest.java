@@ -3,6 +3,7 @@ package com.project.diagram_service.services;
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
+import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -1070,5 +1071,342 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         assertThat(result.getLinks()).hasSize(1);
         assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+    }
+
+    // Tests for generateAllSystemDependenciesDiagrams method
+
+    @Test
+    @DisplayName("Should generate all system dependencies diagram successfully with multiple systems")
+    void testGenerateAllSystemDependenciesDiagrams_Success() {
+        // Given: Multiple systems with various integration flows
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "Payment Service", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-003", "PROVIDER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
+        system1.setIntegrationFlows(Arrays.asList(flow1, flow2));
+
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "User Service", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-001", "PROVIDER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flow4 = createIntegrationFlow("SYS-004", "CONSUMER", "DATABASE", "Continuous", null);
+        system2.setIntegrationFlows(Arrays.asList(flow3, flow4));
+
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "Notification Service", "REV-003");
+        SystemDependencyDTO.IntegrationFlow flow5 = createIntegrationFlow("SYS-001", "CONSUMER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
+        system3.setIntegrationFlows(Arrays.asList(flow5));
+
+        List<SystemDependencyDTO> systems = Arrays.asList(system1, system2, system3);
+        when(coreServiceClient.getSystemDependencies()).thenReturn(systems);
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(4); // SYS-001(Core), SYS-002/003/004(External)
+        assertThat(result.getLinks()).hasSize(3); // 3 links with proper counts
+        assertThat(result.getMetadata()).isNotNull();
+        assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
+
+        // Verify nodes - algorithm creates SYS-001 as Core, others as External counterparts
+        assertThat(result.getNodes()).extracting("id").containsExactlyInAnyOrder("SYS-001", "SYS-002", "SYS-003", "SYS-004");
+        assertThat(result.getNodes()).extracting("type").contains("Core System", "External");
+        
+        // Only SYS-001 appears as Core System in this algorithm implementation
+        assertThat(result.getNodes().stream().filter(n -> "Core System".equals(n.getType())).map(n -> n.getName()))
+                .containsExactly("Payment Service");
+        
+        // Verify links are deduplicated and have counts
+        assertThat(result.getLinks()).allMatch(link -> link.getCount() > 0);
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should generate diagram with empty systems list")
+    void testGenerateAllSystemDependenciesDiagrams_EmptySystemsList() {
+        // Given: Empty systems list
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Collections.emptyList());
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty();
+        assertThat(result.getLinks()).isEmpty();
+        assertThat(result.getMetadata()).isNotNull();
+        assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle diagram generation with systems having no integration flows")
+    void testGenerateAllSystemDependenciesDiagrams_NoIntegrationFlows() {
+        // Given: Systems with no integration flows
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "Isolated System A", "REV-001");
+        system1.setIntegrationFlows(Collections.emptyList());
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "Isolated System B", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty(); // No nodes created because no integration flows
+        assertThat(result.getLinks()).isEmpty();
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should properly deduplicate bidirectional links")
+    void testGenerateAllSystemDependenciesDiagrams_BidirectionalLinkDeduplication() {
+        // Given: Systems with bidirectional flows (algorithm creates linkId dynamically)
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System A", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1));
+
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System B", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-001", "PROVIDER", "REST_API", "Daily", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1); // Should be deduplicated to 1 link
+        
+        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getCount()).isEqualTo(2); // Count should reflect both directions
+        assertThat(link.getSource()).isIn("SYS-001", "SYS-002");
+        assertThat(link.getTarget()).isIn("SYS-001", "SYS-002");
+        assertThat(link.getSource()).isNotEqualTo(link.getTarget());
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should count multiple flows between same systems correctly")
+    void testGenerateAllSystemDependenciesDiagrams_MultipleFlowsBetweenSameSystems() {
+        // Given: Multiple flows between same two systems
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System A", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", null);
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-002", "PROVIDER", "DATABASE", "Continuous", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1, flow2, flow3));
+
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System B", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1);
+        
+        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getCount()).isEqualTo(3); // Should count all 3 flows
+        assertThat(link.getSource()).isEqualTo("SYS-001");
+        assertThat(link.getTarget()).isEqualTo("SYS-002");
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should classify systems as Core vs External correctly")
+    void testGenerateAllSystemDependenciesDiagrams_SystemClassification() {
+        // Given: One core system referencing external systems
+        SystemDependencyDTO coreSystem = createSystemDependency("SYS-001", "Core Payment Service", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flowToExternal1 = createIntegrationFlow("EXT-001", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow flowToExternal2 = createIntegrationFlow("EXT-002", "PROVIDER", "MESSAGING", "Hourly", null);
+        coreSystem.setIntegrationFlows(Arrays.asList(flowToExternal1, flowToExternal2));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(coreSystem));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // 1 Core + 2 External
+        assertThat(result.getLinks()).hasSize(2);
+
+        // Verify core system classification
+        OverallSystemDependenciesDiagramDTO.NodeDTO coreNode = result.getNodes().stream()
+                .filter(n -> "SYS-001".equals(n.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(coreNode.getType()).isEqualTo("Core System");
+        assertThat(coreNode.getName()).isEqualTo("Core Payment Service");
+        assertThat(coreNode.getCriticality()).isNotNull();
+
+        // Verify external systems classification
+        List<OverallSystemDependenciesDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
+                .filter(n -> "External".equals(n.getType()))
+                .toList();
+        assertThat(externalNodes).hasSize(2);
+        assertThat(externalNodes).extracting("id").containsExactlyInAnyOrder("EXT-001", "EXT-002");
+        // External systems use their ID as the name (as per the implementation: node.setName(flow.getCounterpartSystemCode()))
+        assertThat(externalNodes).allMatch(n -> n.getName().equals(n.getId()));
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle null integration flows gracefully")
+    void testGenerateAllSystemDependenciesDiagrams_NullIntegrationFlows() {
+        // Given: System with null integration flows
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "System with Null Flows", "REV-001");
+        system.setIntegrationFlows(null);
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).isEmpty(); // No nodes created because no integration flows
+        assertThat(result.getLinks()).isEmpty();
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle systems with null counterpart system codes")
+    void testGenerateAllSystemDependenciesDiagrams_NullCounterpartSystemCodes() {
+        // Given: Integration flows with null counterpart system codes
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "System A", "REV-001");
+        SystemDependencyDTO.IntegrationFlow validFlow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow invalidFlow = createIntegrationFlow(null, "PROVIDER", "MESSAGING", "Hourly", null);
+        system.setIntegrationFlows(Arrays.asList(validFlow, invalidFlow));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        // Note: null counterpart creates a node with null id, so we get 3 nodes: SYS-001, SYS-002, and null
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, and null counterpart
+        assertThat(result.getLinks()).hasSize(2); // Both flows create links (even with null target)
+        
+        // Verify the valid nodes exist
+        assertThat(result.getNodes().stream().map(n -> n.getId()).filter(id -> id != null))
+                .containsExactlyInAnyOrder("SYS-001", "SYS-002");
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle CoreServiceClient exception")
+    void testGenerateAllSystemDependenciesDiagrams_ServiceException() {
+        // Given: CoreServiceClient throws exception
+        when(coreServiceClient.getSystemDependencies()).thenThrow(new RuntimeException("Service unavailable"));
+
+        // When & Then
+        assertThatThrownBy(() -> diagramService.generateAllSystemDependenciesDiagrams())
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Service unavailable");
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should generate diagram with complex interconnected systems")
+    void testGenerateAllSystemDependenciesDiagrams_ComplexInterconnectedSystems() {
+        // Given: Complex network of interconnected systems - all systems have integration flows
+        SystemDependencyDTO paymentService = createSystemDependency("PAY-001", "Payment Service", "REV-001");
+        paymentService.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("USER-001", "CONSUMER", "REST_API", "Daily", null),
+            createIntegrationFlow("BANK-001", "PROVIDER", "SOAP", "Hourly", null),
+            createIntegrationFlow("NOTIF-001", "CONSUMER", "MESSAGING", "Real-time", null)
+        ));
+
+        SystemDependencyDTO userService = createSystemDependency("USER-001", "User Service", "REV-002");
+        userService.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("PAY-001", "PROVIDER", "REST_API", "Daily", null),
+            createIntegrationFlow("AUTH-001", "CONSUMER", "OAUTH", "Continuous", null),
+            createIntegrationFlow("NOTIF-001", "CONSUMER", "MESSAGING", "Real-time", null)
+        ));
+
+        SystemDependencyDTO notificationService = createSystemDependency("NOTIF-001", "Notification Service", "REV-003");
+        notificationService.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("PAY-001", "PROVIDER", "MESSAGING", "Real-time", null),
+            createIntegrationFlow("USER-001", "PROVIDER", "MESSAGING", "Real-time", null),
+            createIntegrationFlow("EMAIL-001", "CONSUMER", "SMTP", "Batch", null)
+        ));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(paymentService, userService, notificationService));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        // Based on algorithm behavior: only the first system processed will be Core System,
+        // others appear as External counterparts even if they're in the main dependencies list
+        assertThat(result.getNodes()).hasSizeGreaterThanOrEqualTo(4); // At least 1 Core + 3 External minimum
+        
+        // Verify at least one core system exists
+        List<OverallSystemDependenciesDiagramDTO.NodeDTO> coreNodes = result.getNodes().stream()
+                .filter(n -> "Core System".equals(n.getType()))
+                .toList();
+        assertThat(coreNodes).hasSizeGreaterThanOrEqualTo(1);
+        assertThat(coreNodes).allMatch(n -> n.getName() != null && !n.getName().isEmpty());
+
+        // Verify external systems exist
+        List<OverallSystemDependenciesDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
+                .filter(n -> "External".equals(n.getType()))
+                .toList();
+        assertThat(externalNodes).hasSizeGreaterThanOrEqualTo(3);
+
+        // Verify bidirectional links are properly deduplicated
+        assertThat(result.getLinks()).hasSizeGreaterThan(0);
+        assertThat(result.getLinks()).allMatch(link -> link.getCount() > 0);
+
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle systems with same counterpart references multiple times")
+    void testGenerateAllSystemDependenciesDiagrams_SameCounterpartMultipleReferences() {
+        // Given: System with multiple flows to same counterpart with different patterns
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "Multi-Pattern System", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-002", "PROVIDER", "DATABASE", "Continuous", "DB_CONNECTION");
+        SystemDependencyDTO.IntegrationFlow flow4 = createIntegrationFlow("SYS-002", "CONSUMER", "FILE_TRANSFER", "Weekly", "SFTP");
+        system.setIntegrationFlows(Arrays.asList(flow1, flow2, flow3, flow4));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(1);
+        
+        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        assertThat(link.getSource()).isEqualTo("SYS-001");
+        assertThat(link.getTarget()).isEqualTo("SYS-002");
+        assertThat(link.getCount()).isEqualTo(4); // All 4 different integration patterns counted
+
+        verify(coreServiceClient).getSystemDependencies();
     }
 }

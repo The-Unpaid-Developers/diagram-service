@@ -2,6 +2,7 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
+import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.services.DiagramService;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,12 +18,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.time.LocalDate;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.hamcrest.Matchers.hasSize;
 
 @WebMvcTest(controllers = DiagramController.class, excludeAutoConfiguration = SecurityAutoConfiguration.class)
 class DiagramControllerTest {
@@ -470,5 +473,189 @@ class DiagramControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(diagramService).findAllPathsDiagram("NONEXISTENT", "SYS-002");
+    }
+
+    // Tests for getAllSystemDependenciesDiagrams endpoint
+    @Test
+    void getAllSystemDependenciesDiagrams_Success() throws Exception {
+        // Create mock overall system dependencies diagram
+        OverallSystemDependenciesDiagramDTO mockDiagram = new OverallSystemDependenciesDiagramDTO();
+        
+        when(diagramService.generateAllSystemDependenciesDiagrams()).thenReturn(mockDiagram);
+
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON));
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    @Test
+    void getAllSystemDependenciesDiagrams_ServiceException() throws Exception {
+        when(diagramService.generateAllSystemDependenciesDiagrams())
+                .thenThrow(new RuntimeException("Service error"));
+
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    @Test
+    void getAllSystemDependenciesDiagrams_EmptyDiagram() throws Exception {
+        OverallSystemDependenciesDiagramDTO emptyDiagram = new OverallSystemDependenciesDiagramDTO();
+        emptyDiagram.setNodes(List.of());
+        emptyDiagram.setLinks(List.of());
+        
+        when(diagramService.generateAllSystemDependenciesDiagrams()).thenReturn(emptyDiagram);
+
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nodes").isArray())
+                .andExpect(jsonPath("$.nodes").isEmpty())
+                .andExpect(jsonPath("$.links").isArray())
+                .andExpect(jsonPath("$.links").isEmpty());
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    @Test
+    void getAllSystemDependenciesDiagrams_ValidResponseStructure() throws Exception {
+        // Create a complete mock diagram with all expected fields
+        OverallSystemDependenciesDiagramDTO mockDiagram = new OverallSystemDependenciesDiagramDTO();
+        
+        // Create mock nodes
+        OverallSystemDependenciesDiagramDTO.NodeDTO node1 = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+        node1.setId("SYS-001");
+        node1.setName("Core System A");
+        node1.setType("Core");
+        node1.setCriticality("High");
+        
+        OverallSystemDependenciesDiagramDTO.NodeDTO node2 = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+        node2.setId("SYS-002");
+        node2.setName("External System B");
+        node2.setType("External");
+        node2.setCriticality("Medium");
+        
+        // Create mock links
+        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+        link.setSource("SYS-001");
+        link.setTarget("SYS-002");
+        link.setCount(3);
+        
+        // Create mock metadata
+        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        metadata.setGeneratedDate(LocalDate.now());
+        
+        mockDiagram.setNodes(List.of(node1, node2));
+        mockDiagram.setLinks(List.of(link));
+        mockDiagram.setMetadata(metadata);
+        
+        when(diagramService.generateAllSystemDependenciesDiagrams()).thenReturn(mockDiagram);
+
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.nodes").isArray())
+                .andExpect(jsonPath("$.nodes", hasSize(2)))
+                .andExpect(jsonPath("$.nodes[0].id").value("SYS-001"))
+                .andExpect(jsonPath("$.nodes[0].name").value("Core System A"))
+                .andExpect(jsonPath("$.nodes[0].type").value("Core"))
+                .andExpect(jsonPath("$.nodes[0].criticality").value("High"))
+                .andExpect(jsonPath("$.nodes[1].id").value("SYS-002"))
+                .andExpect(jsonPath("$.nodes[1].name").value("External System B"))
+                .andExpect(jsonPath("$.nodes[1].type").value("External"))
+                .andExpect(jsonPath("$.nodes[1].criticality").value("Medium"))
+                .andExpect(jsonPath("$.links").isArray())
+                .andExpect(jsonPath("$.links", hasSize(1)))
+                .andExpect(jsonPath("$.links[0].source").value("SYS-001"))
+                .andExpect(jsonPath("$.links[0].target").value("SYS-002"))
+                .andExpect(jsonPath("$.links[0].count").value(3))
+                .andExpect(jsonPath("$.metadata").exists())
+                .andExpect(jsonPath("$.metadata.generatedDate").exists());
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    @Test
+    void getAllSystemDependenciesDiagrams_ContentTypeSupport() throws Exception {
+        OverallSystemDependenciesDiagramDTO mockDiagram = new OverallSystemDependenciesDiagramDTO();
+        when(diagramService.generateAllSystemDependenciesDiagrams()).thenReturn(mockDiagram);
+
+        // Test that endpoint works without explicit Accept header
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON));
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    @Test
+    void getAllSystemDependenciesDiagrams_ComplexDiagram() throws Exception {
+        // Test with a more complex diagram structure
+        OverallSystemDependenciesDiagramDTO complexDiagram = new OverallSystemDependenciesDiagramDTO();
+        
+        // Multiple nodes with different types
+        List<OverallSystemDependenciesDiagramDTO.NodeDTO> nodes = Arrays.asList(
+            createNode("SYS-001", "Payment Service", "Core", "Critical"),
+            createNode("SYS-002", "User Service", "Core", "High"),
+            createNode("SYS-003", "External Payment Gateway", "External", "Medium"),
+            createNode("SYS-004", "Notification Service", "Core", "Low")
+        );
+        
+        // Multiple links with different counts
+        List<OverallSystemDependenciesDiagramDTO.LinkDTO> links = Arrays.asList(
+            createLink("SYS-001", "SYS-002", 5),
+            createLink("SYS-001", "SYS-003", 2),
+            createLink("SYS-002", "SYS-004", 1)
+        );
+        
+        complexDiagram.setNodes(nodes);
+        complexDiagram.setLinks(links);
+        
+        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        metadata.setGeneratedDate(LocalDate.now());
+        complexDiagram.setMetadata(metadata);
+        
+        when(diagramService.generateAllSystemDependenciesDiagrams()).thenReturn(complexDiagram);
+
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nodes", hasSize(4)))
+                .andExpect(jsonPath("$.links", hasSize(3)))
+                .andExpect(jsonPath("$.nodes[?(@.type == 'Core')]", hasSize(3)))
+                .andExpect(jsonPath("$.nodes[?(@.type == 'External')]", hasSize(1)))
+                .andExpect(jsonPath("$.links[?(@.count > 1)]", hasSize(2)));
+
+        verify(diagramService).generateAllSystemDependenciesDiagrams();
+    }
+
+    // Helper methods for creating test data
+    private OverallSystemDependenciesDiagramDTO.NodeDTO createNode(String id, String name, String type, String criticality) {
+        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+        node.setId(id);
+        node.setName(name);
+        node.setType(type);
+        node.setCriticality(criticality);
+        return node;
+    }
+
+    private OverallSystemDependenciesDiagramDTO.LinkDTO createLink(String source, String target, int count) {
+        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+        link.setSource(source);
+        link.setTarget(target);
+        link.setCount(count);
+        return link;
     }
 }
