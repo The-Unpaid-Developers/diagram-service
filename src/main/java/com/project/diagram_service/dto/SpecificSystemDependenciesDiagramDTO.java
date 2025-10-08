@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Data
-public class SystemDiagramDTO {
+public class SpecificSystemDependenciesDiagramDTO {
     private List<NodeDTO> nodes;
     private List<LinkDTO> links;
     private MetadataDTO metadata;
@@ -16,7 +16,6 @@ public class SystemDiagramDTO {
         private String name;
         private String type;
         private String criticality;
-        private String url;
     }
     
     @Data

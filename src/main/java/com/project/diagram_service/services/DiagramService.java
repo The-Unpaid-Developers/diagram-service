@@ -2,17 +2,18 @@ package com.project.diagram_service.services;
 
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
-import com.project.diagram_service.dto.SystemDiagramDTO;
+import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
+import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Objects;
@@ -92,7 +93,7 @@ public class DiagramService {
      *         visualization
      * @throws IllegalArgumentException if system not found or systemCode is invalid
      */
-    public SystemDiagramDTO generateSystemDependenciesDiagram(String systemCode) {
+    public SpecificSystemDependenciesDiagramDTO generateSystemDependenciesDiagram(String systemCode) {
         if (systemCode == null || systemCode.trim().isEmpty()) {
             throw new IllegalArgumentException("System code must not be null or blank");
         }
@@ -104,12 +105,12 @@ public class DiagramService {
         DiagramComponents components = initializeDiagramComponents(systemCode, primarySystem);
         processAllIntegrationFlows(systemCode, allDependencies, components);
 
-        SystemDiagramDTO.MetadataDTO metadata = buildMetadata(systemCode, primarySystem, components.nodes());
-        SystemDiagramDTO diagram = assembleDiagram(components, metadata);
+        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = buildMetadata(systemCode, primarySystem, components.nodes());
+        SpecificSystemDependenciesDiagramDTO diagram = assembleDiagram(components, metadata);
 
         log.info("Generated diagram with {} nodes and {} links for system {}",
-                components.nodes().size(), components.links().size(), systemCode);
-
+            components.nodes().size(), components.links().size(), systemCode);
+        
         return diagram;
     }
 
@@ -523,8 +524,8 @@ public class DiagramService {
     /**
      * Record to hold diagram components during construction.
      */
-    private record DiagramComponents(List<SystemDiagramDTO.NodeDTO> nodes,
-            List<SystemDiagramDTO.LinkDTO> links,
+    private record DiagramComponents(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes,
+            List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links,
             Set<String> middleware,
             Set<String> processedLinks) {
     }
@@ -688,7 +689,7 @@ public class DiagramService {
      * @return initialized diagram components
      */
     private DiagramComponents initializeDiagramComponents(String systemCode, SystemDependencyDTO primarySystem) {
-        List<SystemDiagramDTO.NodeDTO> nodes = new ArrayList<>();
+        List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes = new ArrayList<>();
         nodes.add(createPrimarySystemNode(systemCode, primarySystem));
 
         return new DiagramComponents(
@@ -787,10 +788,10 @@ public class DiagramService {
      * @param nodes         the diagram nodes
      * @return the metadata
      */
-    private SystemDiagramDTO.MetadataDTO buildMetadata(String systemCode,
+    private SpecificSystemDependenciesDiagramDTO.MetadataDTO buildMetadata(String systemCode,
             SystemDependencyDTO primarySystem,
-            List<SystemDiagramDTO.NodeDTO> nodes) {
-        SystemDiagramDTO.MetadataDTO metadata = new SystemDiagramDTO.MetadataDTO();
+            List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes) {
+        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
         metadata.setCode(systemCode);
         metadata.setReview(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionReviewCode());
         metadata.setIntegrationMiddleware(extractMiddlewareList(nodes));
@@ -804,10 +805,10 @@ public class DiagramService {
      * @param nodes the diagram nodes
      * @return list of middleware node IDs
      */
-    private List<String> extractMiddlewareList(List<SystemDiagramDTO.NodeDTO> nodes) {
+    private List<String> extractMiddlewareList(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes) {
         return nodes.stream()
                 .filter(node -> MIDDLEWARE_TYPE.equals(node.getType()))
-                .map(SystemDiagramDTO.NodeDTO::getId)
+                .map(SpecificSystemDependenciesDiagramDTO.NodeDTO::getId)
                 .toList();
     }
 
@@ -818,9 +819,9 @@ public class DiagramService {
      * @param metadata   the diagram metadata
      * @return the complete diagram
      */
-    private static SystemDiagramDTO assembleDiagram(DiagramComponents components,
-            SystemDiagramDTO.MetadataDTO metadata) {
-        SystemDiagramDTO diagram = new SystemDiagramDTO();
+    private static SpecificSystemDependenciesDiagramDTO assembleDiagram(DiagramComponents components,
+            SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata) {
+        SpecificSystemDependenciesDiagramDTO diagram = new SpecificSystemDependenciesDiagramDTO();
         diagram.setNodes(components.nodes());
         diagram.setLinks(components.links());
         diagram.setMetadata(metadata);
@@ -830,13 +831,12 @@ public class DiagramService {
     /**
      * Creates the primary system node.
      */
-    private SystemDiagramDTO.NodeDTO createPrimarySystemNode(String systemCode, SystemDependencyDTO primarySystem) {
-        SystemDiagramDTO.NodeDTO primaryNode = new SystemDiagramDTO.NodeDTO();
+    private SpecificSystemDependenciesDiagramDTO.NodeDTO createPrimarySystemNode(String systemCode, SystemDependencyDTO primarySystem) {
+        SpecificSystemDependenciesDiagramDTO.NodeDTO primaryNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         primaryNode.setId(systemCode);
         primaryNode.setName(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionName());
         primaryNode.setType(CORE_SYSTEM_TYPE);
         primaryNode.setCriticality(MAJOR_CRITICALITY);
-        primaryNode.setUrl(systemCode + JSON_EXTENSION);
         return primaryNode;
     }
 
@@ -919,13 +919,13 @@ public class DiagramService {
      * @param middlewareNodeId the middleware node ID
      * @param middlewareName   the middleware name
      */
-    private void addMiddlewareNodeIfNeeded(List<SystemDiagramDTO.NodeDTO> nodes,
+    private void addMiddlewareNodeIfNeeded(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes,
             String middlewareNodeId, String middlewareName) {
         if (nodeExists(nodes, middlewareNodeId)) {
             return;
         }
 
-        SystemDiagramDTO.NodeDTO middlewareNode = createMiddlewareNode(middlewareNodeId, middlewareName);
+        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = createMiddlewareNode(middlewareNodeId, middlewareName);
         nodes.add(middlewareNode);
     }
 
@@ -936,22 +936,21 @@ public class DiagramService {
      * @param middlewareName   the middleware name
      * @return the created middleware node
      */
-    private SystemDiagramDTO.NodeDTO createMiddlewareNode(String middlewareNodeId, String middlewareName) {
-        SystemDiagramDTO.NodeDTO middlewareNode = new SystemDiagramDTO.NodeDTO();
+    private SpecificSystemDependenciesDiagramDTO.NodeDTO createMiddlewareNode(String middlewareNodeId, String middlewareName) {
+        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         middlewareNode.setId(middlewareNodeId);
         middlewareNode.setName(middlewareName);
         middlewareNode.setType(MIDDLEWARE_TYPE);
         middlewareNode.setCriticality(STANDARD_CRITICALITY);
-        middlewareNode.setUrl(middlewareName + JSON_EXTENSION);
         return middlewareNode;
     }
 
     /**
      * Creates a link DTO.
      */
-    private SystemDiagramDTO.LinkDTO createLink(String source, String target,
+    private SpecificSystemDependenciesDiagramDTO.LinkDTO createLink(String source, String target,
             SystemDependencyDTO.IntegrationFlow flow, String role) {
-        SystemDiagramDTO.LinkDTO link = new SystemDiagramDTO.LinkDTO();
+        SpecificSystemDependenciesDiagramDTO.LinkDTO link = new SpecificSystemDependenciesDiagramDTO.LinkDTO();
         link.setSource(source);
         link.setTarget(target);
         link.setPattern(flow.getIntegrationMethod());
@@ -970,7 +969,7 @@ public class DiagramService {
      * @param primarySystemCode the primary system code
      * @param allDependencies   all system dependencies
      */
-    private void addSystemNodeIfNeeded(List<SystemDiagramDTO.NodeDTO> nodes, String nodeId,
+    private void addSystemNodeIfNeeded(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String nodeId,
             String systemCode, String primarySystemCode,
             List<SystemDependencyDTO> allDependencies) {
         if (systemCode.equals(primarySystemCode) || nodeExists(nodes, nodeId)) {
@@ -978,7 +977,7 @@ public class DiagramService {
         }
 
         SystemDependencyDTO systemData = findSystemData(systemCode, allDependencies);
-        SystemDiagramDTO.NodeDTO node = createSystemNode(nodeId, systemCode, systemData, allDependencies);
+        SpecificSystemDependenciesDiagramDTO.NodeDTO node = createSystemNode(nodeId, systemCode, systemData, allDependencies);
         nodes.add(node);
     }
 
@@ -989,7 +988,7 @@ public class DiagramService {
      * @param nodeId the node ID to check
      * @return true if node exists
      */
-    private static boolean nodeExists(List<SystemDiagramDTO.NodeDTO> nodes, String nodeId) {
+    private static boolean nodeExists(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String nodeId) {
         return nodes.stream().anyMatch(node -> nodeId.equals(node.getId()));
     }
 
@@ -1016,16 +1015,15 @@ public class DiagramService {
      * @param allDependencies all system dependencies
      * @return the created node
      */
-    private SystemDiagramDTO.NodeDTO createSystemNode(String nodeId, String systemCode,
+    private SpecificSystemDependenciesDiagramDTO.NodeDTO createSystemNode(String nodeId, String systemCode,
             SystemDependencyDTO systemData,
             List<SystemDependencyDTO> allDependencies) {
-        SystemDiagramDTO.NodeDTO node = new SystemDiagramDTO.NodeDTO();
+        SpecificSystemDependenciesDiagramDTO.NodeDTO node = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
         node.setId(nodeId);
         node.setName(systemData != null ? systemData.getSolutionOverview().getSolutionDetails().getSolutionName()
                 : systemCode);
         node.setType(determineSystemType(systemCode, allDependencies));
         node.setCriticality(MAJOR_CRITICALITY);
-        node.setUrl(systemCode + JSON_EXTENSION);
         return node;
     }
 
@@ -1034,7 +1032,7 @@ public class DiagramService {
      */
     private void processFlow(SystemDependencyDTO.IntegrationFlow flow, FlowDirection flowDirection,
             String primarySystemCode, Set<String> middleware,
-            List<SystemDiagramDTO.NodeDTO> nodes, List<SystemDiagramDTO.LinkDTO> links) {
+            List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links) {
 
         // Handle middleware
         if (hasValidMiddleware(flow.getMiddleware())) {
@@ -1070,6 +1068,85 @@ public class DiagramService {
         boolean existsInOurData = allDependencies.stream()
                 .anyMatch(system -> system.getSystemCode().equals(systemCode));
         return existsInOurData ? INCOME_SYSTEM_TYPE : EXTERNAL_SYSTEM_TYPE;
+    }
+
+
+    /**
+     * 
+     */
+    public OverallSystemDependenciesDiagramDTO generateAllSystemDependenciesDiagrams() {
+        log.info("Generating diagrams for all systems");
+        
+        List<SystemDependencyDTO> allDependencies = getSystemDependencies();
+        OverallSystemDependenciesDiagramDTO results = extractUniqueLinksAndNodes(allDependencies);
+        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        metadata.setGeneratedDate(LocalDate.now());
+        results.setMetadata(metadata);
+        return results;
+    }
+
+    private OverallSystemDependenciesDiagramDTO extractUniqueLinksAndNodes(List<SystemDependencyDTO> allDependencies) {
+        List<OverallSystemDependenciesDiagramDTO.LinkDTO> uniqueLinks = new ArrayList<>();
+        List<OverallSystemDependenciesDiagramDTO.NodeDTO> uniqueNodes = new ArrayList<>();
+        Map<String, Integer> linkIdentifiers = new HashMap<>();
+        Set<String> nodeIdentifiers = new HashSet<>();
+
+        for (SystemDependencyDTO system : allDependencies) {
+            if (system.getIntegrationFlows() != null) {
+                for (SystemDependencyDTO.IntegrationFlow flow : system.getIntegrationFlows()) {
+                    String linkId = system.getSystemCode() + "-" + flow.getCounterpartSystemCode();
+                    String reverseLinkId = flow.getCounterpartSystemCode() + "-" + system.getSystemCode();
+                    if (!(linkIdentifiers.containsKey(linkId) || linkIdentifiers.containsKey(reverseLinkId))) {
+                        linkIdentifiers.put(linkId, 1);
+                        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+                        link.setSource(system.getSystemCode());
+                        link.setTarget(flow.getCounterpartSystemCode());
+                        uniqueLinks.add(link);
+                    } else {
+                        if (linkIdentifiers.containsKey(linkId)) {
+                            linkIdentifiers.put(linkId, linkIdentifiers.get(linkId) + 1);
+                        } else {
+                            linkIdentifiers.put(reverseLinkId, linkIdentifiers.get(reverseLinkId) + 1);
+                        }
+                    }
+                    if (!nodeIdentifiers.contains(system.getSystemCode())) {
+                        nodeIdentifiers.add(system.getSystemCode());
+                        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+                        node.setId(system.getSystemCode());
+                        node.setName(system.getSolutionOverview().getSolutionDetails().getSolutionName());
+                        node.setType(CORE_SYSTEM_TYPE);
+                        node.setCriticality(MAJOR_CRITICALITY);
+                        uniqueNodes.add(node);
+                    }
+                    if (!nodeIdentifiers.contains(flow.getCounterpartSystemCode())) {
+                        nodeIdentifiers.add(flow.getCounterpartSystemCode());
+                        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+                        node.setId(flow.getCounterpartSystemCode());
+                        node.setName(flow.getCounterpartSystemCode());
+                        node.setType(EXTERNAL_SYSTEM_TYPE);
+                        node.setCriticality(STANDARD_CRITICALITY);
+                        uniqueNodes.add(node);
+                    }
+                }
+            }
+        }
+
+        for (OverallSystemDependenciesDiagramDTO.LinkDTO link : uniqueLinks) {
+            String linkId = link.getSource() + "-" + link.getTarget();
+            String reverseLinkId = link.getTarget() + "-" + link.getSource();
+            if (linkIdentifiers.containsKey(linkId)) {
+                link.setCount(linkIdentifiers.get(linkId));
+            } else if (linkIdentifiers.containsKey(reverseLinkId)) {
+                link.setCount(linkIdentifiers.get(reverseLinkId));
+            } else {
+                link.setCount(1);
+            }
+        }
+
+        OverallSystemDependenciesDiagramDTO diagram = new OverallSystemDependenciesDiagramDTO();
+        diagram.setLinks(uniqueLinks);
+        diagram.setNodes(uniqueNodes);
+        return diagram;
     }
 
     /**
