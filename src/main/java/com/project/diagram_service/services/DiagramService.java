@@ -549,12 +549,15 @@ public class DiagramService {
             List<SystemDependencyDTO> allDependencies) {
         Set<String> allSystemsInPaths = new HashSet<>();
         Set<String> middlewareNames = new HashSet<>();
-        List<PathDiagramDTO.LinkDTO> links = new ArrayList<>();
+        Map<String, PathDiagramDTO.LinkDTO> uniqueLinks = new HashMap<>();
 
-        // Process all path segments to create direct system-to-system links
+        // Process all path segments to create direct system-to-system links with deduplication
         for (Path path : paths) {
-            processPathForDirectLinks(path, allSystemsInPaths, middlewareNames, links);
+            processPathForDirectLinksWithDeduplication(path, allSystemsInPaths, middlewareNames, uniqueLinks);
         }
+
+        // Convert map to list
+        List<PathDiagramDTO.LinkDTO> links = new ArrayList<>(uniqueLinks.values());
 
         // Create nodes only for systems (not middleware)
         List<PathDiagramDTO.NodeDTO> nodes = createPathNodes(allSystemsInPaths, allDependencies);
@@ -578,16 +581,15 @@ public class DiagramService {
     }
 
     /**
-     * Processes a path to create direct system-to-system links with middleware as
-     * metadata.
+     * Processes a path to create direct system-to-system links with deduplication and middleware as metadata.
      * 
      * @param path              the path to process
      * @param allSystemsInPaths set to collect all system IDs
      * @param middlewareNames   set to collect middleware names
-     * @param links             list to collect created links
+     * @param uniqueLinks       map to store unique links by identifier
      */
-    private void processPathForDirectLinks(Path path, Set<String> allSystemsInPaths,
-            Set<String> middlewareNames, List<PathDiagramDTO.LinkDTO> links) {
+    private void processPathForDirectLinksWithDeduplication(Path path, Set<String> allSystemsInPaths,
+            Set<String> middlewareNames, Map<String, PathDiagramDTO.LinkDTO> uniqueLinks) {
         for (PathSegment segment : path.segments()) {
             String source = segment.source();
             String target = segment.target();
@@ -601,9 +603,15 @@ public class DiagramService {
                 middlewareNames.add(normalizeNodeId(middleware));
             }
 
-            // Create direct system-to-system link with middleware as metadata
-            PathDiagramDTO.LinkDTO link = createPathDiagramLink(source, target, originalFlow);
-            links.add(link);
+            // Create link identifier for deduplication - include all distinguishing properties
+            // Only truly identical links (same source, target, pattern, frequency, middleware, role) are deduplicated
+            String linkId = createPathLinkIdentifier(source, target, originalFlow);
+            
+            // Only add the link if we haven't seen this exact link before
+            if (!uniqueLinks.containsKey(linkId)) {
+                PathDiagramDTO.LinkDTO link = createPathDiagramLink(source, target, originalFlow);
+                uniqueLinks.put(linkId, link);
+            }
         }
     }
 
@@ -889,6 +897,32 @@ public class DiagramService {
             String integrationMethod) {
         return currentSystemCode + ":" + flowDirection.producer() + "->" + flowDirection.consumer() + ":"
                 + integrationMethod;
+    }
+
+    /**
+     * Creates a unique identifier for path diagram links to enable proper deduplication.
+     * Only links with identical source, target, pattern, frequency, middleware, and role are considered duplicates.
+     * 
+     * @param source       the source system
+     * @param target       the target system
+     * @param originalFlow the original integration flow containing link properties
+     * @return unique identifier for the link
+     */
+    private String createPathLinkIdentifier(String source, String target, SystemDependencyDTO.IntegrationFlow originalFlow) {
+        String pattern = originalFlow.getIntegrationMethod();
+        String frequency = originalFlow.getFrequency();
+        String middleware = originalFlow.getMiddleware();
+        String role = originalFlow.getCounterpartSystemRole();
+        
+        // Create identifier that includes all distinguishing properties
+        // Use null-safe strings to handle null values consistently
+        return String.format("%s->%s:%s:%s:%s:%s", 
+                source, 
+                target, 
+                pattern != null ? pattern : "null",
+                frequency != null ? frequency : "null", 
+                middleware != null ? middleware : "null",
+                role != null ? role : "null");
     }
 
     /**

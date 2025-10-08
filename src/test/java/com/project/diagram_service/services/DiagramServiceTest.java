@@ -878,9 +878,9 @@ class DiagramServiceTest {
     }
 
     @Test
-    @DisplayName("Should find multiple paths between systems")
+    @DisplayName("Should find multiple paths between systems but deduplicate only identical links")
     void testFindAllPathsDiagram_MultiplePaths() {
-        // Given: SYS-001 → SYS-002 via multiple routes
+        // Given: SYS-001 → SYS-002 via multiple routes with different properties
         SystemDependencyDTO system = createSystemDependency("SYS-001", "System One", "REV-001");
         SystemDependencyDTO.IntegrationFlow directFlow = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
         SystemDependencyDTO.IntegrationFlow middlewareFlow = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
@@ -894,10 +894,18 @@ class DiagramServiceTest {
         // Then
         assertThat(result).isNotNull();
         assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
-        assertThat(result.getLinks()).hasSize(2); // Two direct links with different middleware
+        assertThat(result.getLinks()).hasSize(2); // Two different links since they have different properties
         
-        // Should find both direct and middleware paths
+        // Should find both paths
         assertThat(result.getMetadata().getReview()).isEqualTo("2 paths found");
+        
+        // Should preserve middleware information in metadata
+        assertThat(result.getMetadata().getIntegrationMiddleware())
+            .contains("MESSAGE_QUEUE");
+            
+        // Verify both links exist with different properties
+        assertThat(result.getLinks()).extracting("pattern").containsExactlyInAnyOrder("REST_API", "MESSAGING");
+        assertThat(result.getLinks()).extracting("frequency").containsExactlyInAnyOrder("Daily", "Hourly");
     }
 
     @Test
@@ -1407,6 +1415,265 @@ class DiagramServiceTest {
         assertThat(link.getTarget()).isEqualTo("SYS-002");
         assertThat(link.getCount()).isEqualTo(4); // All 4 different integration patterns counted
 
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    // Tests for path finding link deduplication
+
+    @Test
+    @DisplayName("Should deduplicate links when multiple paths exist between same systems")
+    void testFindAllPathsDiagram_LinkDeduplication_MultiplePathsSameSystems() {
+        // Given: Multiple flows from SYS-001 to SYS-002 and SYS-002 to SYS-003, creating multiple paths from SYS-001 to SYS-003
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1a = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow flow1b = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "QUEUE");
+        system1.setIntegrationFlows(Arrays.asList(flow1a, flow1b));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2a = createIntegrationFlow("SYS-003", "CONSUMER", "SOAP", "Weekly", null);
+        SystemDependencyDTO.IntegrationFlow flow2b = createIntegrationFlow("SYS-003", "CONSUMER", "FILE_TRANSFER", "Monthly", null);
+        SystemDependencyDTO.IntegrationFlow flow2c = createIntegrationFlow("SYS-003", "CONSUMER", "DATABASE", "Real-time", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2a, flow2b, flow2c));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System Three", "REV-003");
+        system3.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3));
+
+        // When: Finding paths from SYS-001 to SYS-003
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-003");
+
+        // Then: Should have separate links for each unique flow combination
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, SYS-003
+        assertThat(result.getLinks()).hasSize(5); // 2 from SYS-001->SYS-002 + 3 from SYS-002->SYS-003
+        
+        // Find links from SYS-001 to SYS-002
+        List<PathDiagramDTO.LinkDTO> links1to2 = result.getLinks().stream()
+            .filter(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()))
+            .toList();
+        assertThat(links1to2).hasSize(2); // REST_API and MESSAGING flows
+        
+        // Find links from SYS-002 to SYS-003
+        List<PathDiagramDTO.LinkDTO> links2to3 = result.getLinks().stream()
+            .filter(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()))
+            .toList();
+        assertThat(links2to3).hasSize(3); // SOAP, FILE_TRANSFER, and DATABASE flows
+        
+        // Should have found all path combinations: 2 × 3 = 6 paths
+        assertThat(result.getMetadata().getReview()).isEqualTo("6 paths found");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should deduplicate only truly identical links")
+    void testFindAllPathsDiagram_LinkDeduplication_IdenticalDirectLinks() {
+        // Given: Multiple flows between same systems, including some truly identical ones
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY"); // Identical to flow1
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "QUEUE"); // Different properties
+        system1.setIntegrationFlows(Arrays.asList(flow1, flow2, flow3));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When: Finding paths from SYS-001 to SYS-002
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then: Should have two different links (one REST_API and one MESSAGING), with identical ones deduplicated
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(2); // Two different links: REST_API and MESSAGING
+        
+        // Verify both unique links exist with their distinct properties
+        assertThat(result.getLinks()).extracting("pattern").containsExactlyInAnyOrder("REST_API", "MESSAGING");
+        assertThat(result.getLinks()).extracting("frequency").containsExactlyInAnyOrder("Daily", "Hourly");
+        assertThat(result.getLinks()).extracting("middleware").containsExactlyInAnyOrder("API_GATEWAY", "QUEUE");
+        
+        // Should find 2 unique paths (flow1 and flow2 are identical, so only count as one path in the graph)
+        assertThat(result.getMetadata().getReview()).isEqualTo("2 paths found");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle bidirectional connections correctly preserving all distinct flows")
+    void testFindAllPathsDiagram_LinkDeduplication_BidirectionalConnections() {
+        // Given: Bidirectional flows between systems with different properties
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1to2 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1to2));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2to1 = createIntegrationFlow("SYS-001", "CONSUMER", "MESSAGING", "Hourly", null);
+        SystemDependencyDTO.IntegrationFlow flow2to3 = createIntegrationFlow("SYS-003", "CONSUMER", "SOAP", "Weekly", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2to1, flow2to3));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System Three", "REV-003");
+        system3.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3));
+
+        // When: Finding paths from SYS-001 to SYS-003
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-003");
+
+        // Then: Should show separate directional links (SYS-001->SYS-002 and SYS-002->SYS-003)
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, SYS-003
+        assertThat(result.getLinks()).hasSize(2); // Two directional links
+        
+        // Check that we have the correct directional links
+        boolean hasLink1to2 = result.getLinks().stream()
+            .anyMatch(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()));
+        boolean hasLink2to3 = result.getLinks().stream()
+            .anyMatch(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()));
+            
+        assertThat(hasLink1to2).isTrue();
+        assertThat(hasLink2to3).isTrue();
+        
+        // Should find 1 path: SYS-001 -> SYS-002 -> SYS-003
+        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should deduplicate complex multi-hop paths correctly preserving distinct flows")
+    void testFindAllPathsDiagram_LinkDeduplication_ComplexMultiHopPaths() {
+        // Given: Complex scenario with direct and indirect paths, plus some identical flows
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow directFlow = createIntegrationFlow("SYS-003", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow indirectFlow1 = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", null);
+        SystemDependencyDTO.IntegrationFlow indirectFlow2 = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", null); // Identical to indirectFlow1
+        system1.setIntegrationFlows(Arrays.asList(directFlow, indirectFlow1, indirectFlow2));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2to3a = createIntegrationFlow("SYS-003", "CONSUMER", "FILE_TRANSFER", "Monthly", null);
+        SystemDependencyDTO.IntegrationFlow flow2to3b = createIntegrationFlow("SYS-003", "CONSUMER", "DATABASE", "Real-time", null); // Different from flow2to3a
+        system2.setIntegrationFlows(Arrays.asList(flow2to3a, flow2to3b));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System Three", "REV-003");
+        system3.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3));
+
+        // When: Finding paths from SYS-001 to SYS-003
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-003");
+
+        // Then: Should have distinct links for each unique flow
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, SYS-003
+        assertThat(result.getLinks()).hasSize(4); // 1 direct + 1 from SYS-001->SYS-002 + 2 from SYS-002->SYS-003
+        
+        // Check we have all expected unique links
+        boolean hasDirectLink = result.getLinks().stream()
+            .anyMatch(link -> "SYS-001".equals(link.getSource()) && "SYS-003".equals(link.getTarget()));
+        boolean hasLink1to2 = result.getLinks().stream()
+            .anyMatch(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()));
+        
+        long links2to3Count = result.getLinks().stream()
+            .filter(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()))
+            .count();
+            
+        assertThat(hasDirectLink).isTrue();
+        assertThat(hasLink1to2).isTrue();
+        assertThat(links2to3Count).isEqualTo(2); // Two different flows: FILE_TRANSFER and DATABASE
+        
+        // Should find paths: 1 direct + (1 × 2) = 3 total paths (indirectFlow2 is identical to indirectFlow1)
+        assertThat(result.getMetadata().getReview()).isEqualTo("3 paths found");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should preserve middleware information in all distinct links")
+    void testFindAllPathsDiagram_LinkDeduplication_PreservesMiddleware() {
+        // Given: Multiple flows with different middleware between same systems
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flowWithMiddleware = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flowWithoutMiddleware = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", null);
+        SystemDependencyDTO.IntegrationFlow flowWithDifferentMiddleware = createIntegrationFlow("SYS-002", "CONSUMER", "SOAP", "Weekly", "ESB");
+        system1.setIntegrationFlows(Arrays.asList(flowWithMiddleware, flowWithoutMiddleware, flowWithDifferentMiddleware));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When: Finding paths from SYS-001 to SYS-002
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-002");
+
+        // Then: Should preserve all different links with their distinct middleware
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2);
+        assertThat(result.getLinks()).hasSize(3); // Three different links with different properties
+        
+        // Verify all distinct links exist with their unique properties
+        assertThat(result.getLinks()).extracting("pattern").containsExactlyInAnyOrder("REST_API", "MESSAGING", "SOAP");
+        assertThat(result.getLinks()).extracting("middleware").containsExactlyInAnyOrder("API_GATEWAY", null, "ESB");
+        
+        // Should collect all middleware used across paths (excluding null values)
+        assertThat(result.getMetadata().getIntegrationMiddleware())
+            .containsExactlyInAnyOrder("API_GATEWAY", "ESB");
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should demonstrate proper deduplication - only truly identical links are removed")
+    void testFindAllPathsDiagram_LinkDeduplication_DeduplicationBenefit() {
+        // Given: A scenario that shows proper deduplication behavior
+        // SYS-001 has 3 different flows to SYS-002 (all unique)
+        // SYS-002 has 2 identical flows to SYS-003 (truly identical, should be deduplicated)
+        // This tests that we preserve distinct flows but remove exact duplicates
+        
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1a = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", "API_GATEWAY");
+        SystemDependencyDTO.IntegrationFlow flow1b = createIntegrationFlow("SYS-002", "CONSUMER", "MESSAGING", "Hourly", "MESSAGE_QUEUE");
+        SystemDependencyDTO.IntegrationFlow flow1c = createIntegrationFlow("SYS-002", "CONSUMER", "SOAP", "Weekly", "ESB");
+        system1.setIntegrationFlows(Arrays.asList(flow1a, flow1b, flow1c));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        // Two identical flows - these should be deduplicated to one link but represent one path
+        SystemDependencyDTO.IntegrationFlow flow2a = createIntegrationFlow("SYS-003", "CONSUMER", "FILE_TRANSFER", "Monthly", "SFTP_SERVER");
+        SystemDependencyDTO.IntegrationFlow flow2b = createIntegrationFlow("SYS-003", "CONSUMER", "FILE_TRANSFER", "Monthly", "SFTP_SERVER"); // Identical to flow2a
+        system2.setIntegrationFlows(Arrays.asList(flow2a, flow2b));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System Three", "REV-003");
+        system3.setIntegrationFlows(Collections.emptyList());
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3));
+
+        // When: Finding paths from SYS-001 to SYS-003
+        PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-003");
+
+        // Then: Should have preserved distinct flows but deduplicated identical ones
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, SYS-003
+        assertThat(result.getLinks()).hasSize(4); // 3 distinct from SYS-001->SYS-002 + 1 deduplicated from SYS-002->SYS-003
+        
+        // Verify we have the expected links
+        List<PathDiagramDTO.LinkDTO> links1to2 = result.getLinks().stream()
+            .filter(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()))
+            .toList();
+        assertThat(links1to2).hasSize(3); // All 3 distinct flows preserved
+        
+        List<PathDiagramDTO.LinkDTO> links2to3 = result.getLinks().stream()
+            .filter(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()))
+            .toList();
+        assertThat(links2to3).hasSize(1); // Two identical flows deduplicated to one
+            
+        // Should find paths: 3 flows from SYS-001 to SYS-002 × 1 unique flow from SYS-002 to SYS-003 = 3 total paths
+        assertThat(result.getMetadata().getReview()).isEqualTo("3 paths found");
+        
+        // Should collect all middleware used across all flows
+        assertThat(result.getMetadata().getIntegrationMiddleware())
+            .containsExactlyInAnyOrder("API_GATEWAY", "MESSAGE_QUEUE", "ESB", "SFTP_SERVER");
+        
         verify(coreServiceClient).getSystemDependencies();
     }
 }
