@@ -2,6 +2,7 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
@@ -82,6 +83,36 @@ public class DiagramController {
             return ResponseEntity.ok(capabilities);
         } catch (Exception e) {
             log.error("Error getting business capabilities: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * Retrieves all business capabilities in a hierarchical tree structure.
+     *
+     * This endpoint returns business capabilities organized in a tree format suitable
+     * for collapsible tree visualizations using D3.js or similar frameworks.
+     *
+     * The response includes:
+     *   L1, L2, L3 capability levels with system counts
+     *   System-level nodes with detailed metadata
+     *   Parent-child relationships for tree structure
+     *
+     * Currently returns mock data structure until proper business capability
+     * hierarchy is implemented in the core service.
+     *
+     * @return a {@link ResponseEntity} containing a {@link BusinessCapabilitiesTreeDTO}
+     *         with HTTP 200 on success, or HTTP 500 on internal server error
+     */
+    @GetMapping("/business-capabilities/all")
+    public ResponseEntity<BusinessCapabilitiesTreeDTO> getAllBusinessCapabilitiesTree() {
+        log.info("Received request for business capabilities tree");
+        
+        try {
+            BusinessCapabilitiesTreeDTO tree = diagramService.getBusinessCapabilitiesTree();
+            return ResponseEntity.ok(tree);
+        } catch (Exception e) {
+            log.error("Error getting business capabilities tree: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

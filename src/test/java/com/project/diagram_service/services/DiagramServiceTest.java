@@ -7,6 +7,9 @@ import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
 import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import com.project.diagram_service.dto.CommonDiagramDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO.NodeDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +22,10 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -58,9 +65,10 @@ class DiagramServiceTest {
         List<SystemDependencyDTO> result = diagramService.getSystemDependencies();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).hasSize(2);
-        assertThat(result).containsExactly(primarySystem, externalSystem);
+        assertThat(result)
+                .isNotNull()
+                .hasSize(2)
+                .containsExactly(primarySystem, externalSystem);
         verify(coreServiceClient, times(1)).getSystemDependencies();
     }
 
@@ -97,27 +105,29 @@ class DiagramServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.getNodes()).hasSize(2); // Primary system + external system
         assertThat(result.getLinks()).hasSize(1); // One direct link
-        assertThat(result.getMetadata().getCode()).isEqualTo(targetSystemCode);
-        assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
+        assertThat(result.getMetadata())
+                .extracting("code", "generatedDate")
+                .containsExactly(targetSystemCode, LocalDate.now());
         
         // Verify primary system node
         CommonDiagramDTO.NodeDTO primaryNode = findNodeById(result.getNodes(), "SYS-001");
-        assertThat(primaryNode).isNotNull();
-        assertThat(primaryNode.getName()).isEqualTo("Primary System");
-        assertThat(primaryNode.getType()).isEqualTo("Core System");
+        assertThat(primaryNode)
+                .isNotNull()
+                .extracting("name", "type")
+                .containsExactly("Primary System", "Core System");
         
         // Verify external system node (with consumer suffix)
         CommonDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-002-C");
-        assertThat(externalNode).isNotNull();
-        assertThat(externalNode.getName()).isEqualTo("External System");
-        assertThat(externalNode.getType()).isEqualTo("IncomeSystem");
+        assertThat(externalNode)
+                .isNotNull()
+                .extracting("name", "type")
+                .containsExactly("External System", "IncomeSystem");
         
         // Verify link
         CommonDiagramDTO.DetailedLinkDTO link = result.getLinks().get(0);
-        assertThat(link.getSource()).isEqualTo("SYS-001");
-        assertThat(link.getTarget()).isEqualTo("SYS-002-C");
-        assertThat(link.getPattern()).isEqualTo("REST_API");
-        assertThat(link.getFrequency()).isEqualTo("Daily");
+        assertThat(link)
+                .extracting("source", "target", "pattern", "frequency")
+                .containsExactly("SYS-001", "SYS-002-C", "REST_API", "Daily");
     }
 
     @Test
@@ -142,20 +152,19 @@ class DiagramServiceTest {
         
         // Verify middleware node
         CommonDiagramDTO.NodeDTO middlewareNode = findNodeById(result.getNodes(), "API_GATEWAY-C");
-        assertThat(middlewareNode).isNotNull();
-        assertThat(middlewareNode.getName()).isEqualTo("API_GATEWAY");
-        assertThat(middlewareNode.getType()).isEqualTo("Middleware");
-        assertThat(middlewareNode.getCriticality()).isEqualTo("Standard-2");
+        assertThat(middlewareNode)
+                .isNotNull()
+                .extracting("name", "type", "criticality")
+                .containsExactly("API_GATEWAY", "Middleware", "Standard-2");
         
         // Verify middleware is included in metadata
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY-C");
         
         // Verify links
         List<CommonDiagramDTO.DetailedLinkDTO> links = result.getLinks();
-        assertThat(links).anyMatch(link -> 
-            "SYS-001".equals(link.getSource()) && "API_GATEWAY-C".equals(link.getTarget()));
-        assertThat(links).anyMatch(link -> 
-            "API_GATEWAY-C".equals(link.getSource()) && "SYS-002-C".equals(link.getTarget()));
+        assertThat(links)
+                .anyMatch(link -> "SYS-001".equals(link.getSource()) && "API_GATEWAY-C".equals(link.getTarget()))
+                .anyMatch(link -> "API_GATEWAY-C".equals(link.getSource()) && "SYS-002-C".equals(link.getTarget()));
     }
 
     @Test
@@ -487,12 +496,11 @@ class DiagramServiceTest {
         List<CommonDiagramDTO.NodeDTO> middlewareNodes = result.getNodes().stream()
             .filter(node -> "Middleware".equals(node.getType()))
             .toList();
-        assertThat(middlewareNodes).hasSizeGreaterThanOrEqualTo(3);
-        
-        // Verify specific middleware nodes exist
-        assertThat(middlewareNodes).anyMatch(node -> node.getId().contains("API_GATEWAY"));
-        assertThat(middlewareNodes).anyMatch(node -> node.getId().contains("ESB"));
-        assertThat(middlewareNodes).anyMatch(node -> node.getId().contains("MESSAGE_BROKER"));
+        assertThat(middlewareNodes)
+                .hasSizeGreaterThanOrEqualTo(3)
+                .anyMatch(node -> node.getId().contains("API_GATEWAY"))
+                .anyMatch(node -> node.getId().contains("ESB"))
+                .anyMatch(node -> node.getId().contains("MESSAGE_BROKER"));
         
         // Should have links for all flows plus middleware connections
         assertThat(result.getLinks()).hasSizeGreaterThan(6);
@@ -581,21 +589,16 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSizeGreaterThanOrEqualTo(3); // Core system + External producer + Middleware-P
         
         // Should have middleware-P node (producer side since core system is consumer)
-        boolean hasMiddlewareP = result.getNodes().stream()
-            .anyMatch(node -> node.getId().equals("MESSAGE_QUEUE-P"));
-        assertThat(hasMiddlewareP).isTrue();
+        assertThat(result.getNodes())
+                .anyMatch(node -> node.getId().equals("MESSAGE_QUEUE-P"));
         
         // Verify links go through middleware correctly
         assertThat(result.getLinks()).hasSizeGreaterThanOrEqualTo(2);
         
         // Should have producer -> middleware-P and middleware-P -> consumer links
-        boolean hasProducerToMiddleware = result.getLinks().stream()
-            .anyMatch(link -> link.getSource().equals("SYS-EXT-P") && link.getTarget().equals("MESSAGE_QUEUE-P"));
-        boolean hasMiddlewareToConsumer = result.getLinks().stream()
-            .anyMatch(link -> link.getSource().equals("MESSAGE_QUEUE-P") && link.getTarget().equals("SYS-001"));
-        
-        assertThat(hasProducerToMiddleware).isTrue();
-        assertThat(hasMiddlewareToConsumer).isTrue();
+        assertThat(result.getLinks())
+                .anyMatch(link -> link.getSource().equals("SYS-EXT-P") && link.getTarget().equals("MESSAGE_QUEUE-P"))
+                .anyMatch(link -> link.getSource().equals("MESSAGE_QUEUE-P") && link.getTarget().equals("SYS-001"));
     }
 
     @Test
@@ -716,10 +719,9 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2);
         
         // One link should be producer, one should be consumer
-        boolean hasProducerLink = result.getLinks().stream().anyMatch(link -> "PRODUCER".equals(link.getRole()));
-        boolean hasConsumerLink = result.getLinks().stream().anyMatch(link -> "CONSUMER".equals(link.getRole()));
-        assertThat(hasProducerLink).isTrue();
-        assertThat(hasConsumerLink).isTrue();
+        assertThat(result.getLinks())
+                .anyMatch(link -> "PRODUCER".equals(link.getRole()))
+                .anyMatch(link -> "CONSUMER".equals(link.getRole()));
     }
 
     private CommonDiagramDTO.NodeDTO findNodeById(List<CommonDiagramDTO.NodeDTO> nodes, String id) {
@@ -750,14 +752,14 @@ class DiagramServiceTest {
         
         // Verify direct connection
         PathDiagramDTO.PathLinkDTO link = result.getLinks().get(0);
-        assertThat(link.getSource()).isEqualTo("SYS-001");
-        assertThat(link.getTarget()).isEqualTo("SYS-002");
-        assertThat(link.getPattern()).isEqualTo("REST_API");
-        assertThat(link.getFrequency()).isEqualTo("Daily");
-        assertThat(link.getRole()).isEqualTo("CONSUMER");
+        assertThat(link)
+                .extracting("source", "target", "pattern", "frequency", "role")
+                .containsExactly("SYS-001", "SYS-002", "REST_API", "Daily", "CONSUMER");
         
         // Metadata should indicate 1 path found
-        assertThat(result.getMetadata().getReview()).isEqualTo("1 path found");
+        assertThat(result.getMetadata())
+                .extracting("review")
+                .isEqualTo("1 path found");
         assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty();
     }
 
@@ -778,16 +780,16 @@ class DiagramServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.getNodes()).hasSize(2); // Only systems, no middleware nodes
         assertThat(result.getLinks()).hasSize(1); // Direct system-to-system link
-        assertThat(result.getMetadata().getCode()).isEqualTo("SYS-001 → SYS-002");
+        assertThat(result.getMetadata())
+                .extracting("code")
+                .isEqualTo("SYS-001 → SYS-002");
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
         
         // Verify the link has middleware information
         PathDiagramDTO.PathLinkDTO link = result.getLinks().get(0);
-        assertThat(link.getSource()).isEqualTo("SYS-001");
-        assertThat(link.getTarget()).isEqualTo("SYS-002");
-        assertThat(link.getMiddleware()).isEqualTo("API_GATEWAY");
-        assertThat(link.getPattern()).isEqualTo("REST_API");
-        assertThat(link.getFrequency()).isEqualTo("Daily");
+        assertThat(link)
+                .extracting("source", "target", "middleware", "pattern", "frequency")
+                .containsExactly("SYS-001", "SYS-002", "API_GATEWAY", "REST_API", "Daily");
         
         // Metadata should indicate middleware used
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
@@ -813,10 +815,13 @@ class DiagramServiceTest {
         PathDiagramDTO result = diagramService.findAllPathsDiagram("SYS-001", "SYS-004");
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getNodes()).isEmpty();
-        assertThat(result.getLinks()).isEmpty();
-        assertThat(result.getMetadata().getReview()).isEqualTo("No paths found");
+        assertThat(result)
+                .isNotNull()
+                .satisfies(r -> {
+                    assertThat(r.getNodes()).isEmpty();
+                    assertThat(r.getLinks()).isEmpty();
+                    assertThat(r.getMetadata().getReview()).isEqualTo("No paths found");
+                });
     }
 
     @Test
@@ -899,15 +904,21 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Two different links since they have different properties
         
         // Should find both paths
-        assertThat(result.getMetadata().getReview()).isEqualTo("2 paths found");
+        assertThat(result.getMetadata())
+                .extracting("review")
+                .isEqualTo("2 paths found");
         
         // Should preserve middleware information in metadata
         assertThat(result.getMetadata().getIntegrationMiddleware())
             .contains("MESSAGE_QUEUE");
             
         // Verify both links exist with different properties
-        assertThat(result.getLinks()).extracting("pattern").containsExactlyInAnyOrder("REST_API", "MESSAGING");
-        assertThat(result.getLinks()).extracting("frequency").containsExactlyInAnyOrder("Daily", "Hourly");
+        assertThat(result.getLinks())
+                .extracting("pattern")
+                .containsExactlyInAnyOrder("REST_API", "MESSAGING");
+        assertThat(result.getLinks())
+                .extracting("frequency")
+                .containsExactlyInAnyOrder("Daily", "Hourly");
     }
 
     @Test
@@ -1121,8 +1132,10 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).extracting("type").contains("Core System", "External");
         
         // Only SYS-001 appears as Core System in this algorithm implementation
-        assertThat(result.getNodes().stream().filter(n -> "Core System".equals(n.getType())).map(n -> n.getName()))
-                .containsExactly("Payment Service");
+        assertThat(result.getNodes().stream()
+                .filter(n -> "Core System".equals(n.getType()))
+                .map(NodeDTO::getName))
+            .containsExactly("Payment Service");
         
         // Verify links are deduplicated and have counts
         assertThat(result.getLinks()).allMatch(link -> link.getCount() > 0);
@@ -1140,11 +1153,14 @@ class DiagramServiceTest {
         OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getNodes()).isEmpty();
-        assertThat(result.getLinks()).isEmpty();
-        assertThat(result.getMetadata()).isNotNull();
-        assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
+        assertThat(result)
+                .isNotNull()
+                .satisfies(r -> {
+                    assertThat(r.getNodes()).isEmpty();
+                    assertThat(r.getLinks()).isEmpty();
+                    assertThat(r.getMetadata()).isNotNull();
+                    assertThat(r.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
+                });
 
         verify(coreServiceClient).getSystemDependencies();
     }
@@ -1165,9 +1181,12 @@ class DiagramServiceTest {
         OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getNodes()).isEmpty(); // No nodes created because no integration flows
-        assertThat(result.getLinks()).isEmpty();
+        assertThat(result)
+                .isNotNull()
+                .satisfies(r -> {
+                    assertThat(r.getNodes()).isEmpty(); // No nodes created because no integration flows
+                    assertThat(r.getLinks()).isEmpty();
+                });
 
         verify(coreServiceClient).getSystemDependencies();
     }
@@ -1258,16 +1277,19 @@ class DiagramServiceTest {
                 .filter(n -> "SYS-001".equals(n.getId()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(coreNode.getType()).isEqualTo("Core System");
-        assertThat(coreNode.getName()).isEqualTo("Core Payment Service");
+        assertThat(coreNode)
+                .extracting("type", "name")
+                .containsExactly("Core System", "Core Payment Service");
         assertThat(coreNode.getCriticality()).isNotNull();
 
         // Verify external systems classification
         List<CommonDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
                 .filter(n -> "External".equals(n.getType()))
                 .toList();
-        assertThat(externalNodes).hasSize(2);
-        assertThat(externalNodes).extracting("id").containsExactlyInAnyOrder("EXT-001", "EXT-002");
+        assertThat(externalNodes)
+                .hasSize(2)
+                .extracting("id")
+                .containsExactlyInAnyOrder("EXT-001", "EXT-002");
         // External systems use their ID as the name (as per the implementation: node.setName(flow.getCounterpartSystemCode()))
         assertThat(externalNodes).allMatch(n -> n.getName().equals(n.getId()));
 
@@ -1315,8 +1337,10 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Both flows create links (even with null target)
         
         // Verify the valid nodes exist
-        assertThat(result.getNodes().stream().map(n -> n.getId()).filter(id -> id != null))
-                .containsExactlyInAnyOrder("SYS-001", "SYS-002");
+        assertThat(result.getNodes().stream()
+                .map(NodeDTO::getId)
+                .filter(Objects::nonNull))
+            .containsExactlyInAnyOrder("SYS-001", "SYS-002");
 
         verify(coreServiceClient).getSystemDependencies();
     }
@@ -1677,5 +1701,638 @@ class DiagramServiceTest {
             .containsExactlyInAnyOrder("API_GATEWAY", "MESSAGE_QUEUE", "ESB", "SFTP_SERVER");
         
         verify(coreServiceClient).getSystemDependencies();
+    }
+
+    // ========================================
+    // Business Capabilities Unit Tests
+    // ========================================
+
+    @Test
+    @DisplayName("Should transform single system with complete hierarchy from raw data")
+    void testTransformSingleSystemWithCompleteHierarchy() {
+        // Given - Raw data from MongoDB
+        List<BusinessCapabilityDiagramDTO> rawData = createRawSingleSystemData();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // L1 + L2 + L3 + System
+
+        // Verify complete chain: L1 -> L2 -> L3 -> System
+        Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodeMap = 
+            result.getCapabilities().stream()
+                .collect(Collectors.toMap(
+                    BusinessCapabilitiesTreeDTO.BusinessCapabilityNode::getId,
+                    node -> node
+                ));
+
+        // L1: Customer Management
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1 = nodeMap.get("l1-customer-management");
+        assertThat(l1)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("Customer Management");
+                assertThat(node.getLevel()).isEqualTo("L1");
+                assertThat(node.getParentId()).isNull();
+                assertThat(node.getSystemCount()).isEqualTo(1); // 1 L2 child
+            });
+
+        // L2: CRM (parent: L1)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2 = nodeMap.get("l2-crm-under-l1-customer-management");
+        assertThat(l2)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("CRM");
+                assertThat(node.getLevel()).isEqualTo("L2");
+                assertThat(node.getParentId()).isEqualTo("l1-customer-management");
+                assertThat(node.getSystemCount()).isEqualTo(1); // 1 L3 child
+            });
+
+        // L3: Contact Management (parent: L2)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3 = nodeMap.get("l3-contact-management-under-l2-crm-under-l1-customer-management");
+        assertThat(l3)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("Contact Management");
+                assertThat(node.getLevel()).isEqualTo("L3");
+                assertThat(node.getParentId()).isEqualTo("l2-crm-under-l1-customer-management");
+                assertThat(node.getSystemCount()).isEqualTo(1); // 1 system child
+            });
+
+        // System: NextGen Platform (parent: L3)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode system = nodeMap.get("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
+        assertThat(system)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management"); // flow-specific ID
+                assertThat(node.getName()).isEqualTo("NextGen Platform"); // solutionName as name
+                assertThat(node.getLevel()).isEqualTo("System");
+                assertThat(node.getParentId()).isEqualTo("l3-contact-management-under-l2-crm-under-l1-customer-management");
+                assertThat(node.getSystemCount()).isNull(); // null for systems
+            });
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle multiple systems under same L3 from raw data")
+    void testMultipleSystemsUnderSameL3() {
+        // Given - 2 systems under Contact Management
+        List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleSystemsSameL3Data();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result.getCapabilities()).hasSize(5); // L1 + L2 + L3 + 2 Systems
+
+        // L3 should have systemCount = 2
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3 = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()) && "Contact Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(l3.getSystemCount()).isEqualTo(2);
+
+        // Both systems should have same parent (both under same L3 flow)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systems = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        
+        assertThat(systems)
+            .hasSize(2)
+            .extracting("parentId")
+            .containsOnly("l3-contact-management-under-l2-crm-under-l1-customer-management");
+
+        // Systems should have flow-specific IDs but same solution name
+        assertThat(systems)
+            .extracting("name")
+            .containsExactlyInAnyOrder("NextGen Platform", "Legacy CRM");
+    }
+
+    @Test
+    @DisplayName("Should handle multiple L3s under same L2 from raw data")
+    void testMultipleL3sUnderSameL2() {
+        // Given - 2 L3s under CRM
+        List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleL3sSameL2Data();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result.getCapabilities()).hasSize(6); // L1 + L2 + 2xL3 + 2xSystems
+
+        // L2 should have systemCount = 2 (2 L3 children)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2 = result.getCapabilities().stream()
+            .filter(n -> "L2".equals(n.getLevel()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(l2.getSystemCount()).isEqualTo(2);
+
+        // Both L3s should have same parent (L2)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        
+        assertThat(l3Nodes)
+            .hasSize(2)
+            .extracting("parentId")
+            .containsOnly("l2-crm-under-l1-customer-management");
+
+        assertThat(l3Nodes)
+            .extracting("name", "systemCount")
+            .containsExactlyInAnyOrder(
+                tuple("Contact Management", 1),
+                tuple("Lead Management", 1)
+            );
+    }
+
+    @Test
+    @DisplayName("Should handle multiple L2s under same L1 from raw data")
+    void testMultipleL2sUnderSameL1() {
+        // Given - 2 L2s under Customer Management
+        List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleL2sSameL1Data();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result.getCapabilities()).hasSize(7); // L1 + 2xL2 + 2xL3 + 2xSystems
+
+        // L1 should have systemCount = 2 (2 L2 children)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1 = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(l1.getSystemCount()).isEqualTo(2);
+
+        // Both L2s should have same parent (L1)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l2Nodes = result.getCapabilities().stream()
+            .filter(n -> "L2".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        
+        assertThat(l2Nodes)
+            .hasSize(2)
+            .extracting("parentId")
+            .containsOnly("l1-customer-management");
+
+        assertThat(l2Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("CRM", "Customer Service");
+    }
+
+    @Test
+    @DisplayName("Should handle system with multiple business capability flows - each flow creates separate leaf nodes")
+    void testSystemWithMultipleCapabilityFlows() {
+        // Given - System with multiple business capability flows (real-world scenario)
+        BusinessCapabilityDiagramDTO multiCapabilitySystem = new BusinessCapabilityDiagramDTO();
+        multiCapabilitySystem.setSystemCode("sys-001");
+        multiCapabilitySystem.setSolutionOverview(createSolutionOverview("Multi-Purpose CRM"));
+        
+        // System participates in 3 different capability flows:
+        // Flow 1: Customer Management -> CRM -> Contact Management
+        // Flow 2: Customer Management -> CRM -> Lead Management  
+        // Flow 3: Sales -> CRM -> Opportunity Management
+        multiCapabilitySystem.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Customer Management", "CRM", "Contact Management"),
+            createBusinessCapability("Customer Management", "CRM", "Lead Management"),
+            createBusinessCapability("Sales", "CRM", "Opportunity Management")
+        ));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(multiCapabilitySystem));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then - Should create separate leaf nodes for each business capability flow
+        assertThat(result.getCapabilities()).isNotNull();
+        
+        // Should have 2 L1s: Customer Management + Sales
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        assertThat(l1Nodes).hasSize(2);
+        assertThat(l1Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("Customer Management", "Sales");
+
+        // Should have 2 separate CRM L2 nodes (one under each L1)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l2Nodes = result.getCapabilities().stream()
+            .filter(n -> "L2".equals(n.getLevel()) && "CRM".equals(n.getName()))
+            .collect(Collectors.toList());
+        assertThat(l2Nodes).hasSize(2); // CRM appears under both Customer Management and Sales
+
+        // Should have 3 L3 nodes (Contact Management, Lead Management, Opportunity Management)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        assertThat(l3Nodes).hasSize(3);
+        assertThat(l3Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("Contact Management", "Lead Management", "Opportunity Management");
+
+        // CRITICAL: Should have 3 separate system leaf nodes (one for each capability flow)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        assertThat(systemNodes).hasSize(3); // System appears 3 times as separate leaf nodes
+        
+        // All system nodes should have the same name but different IDs (flow-specific)
+        assertThat(systemNodes)
+            .extracting("name")
+            .containsOnly("Multi-Purpose CRM"); // Same solution name
+        
+        // Each system node should have a different parent (different L3)
+        Set<String> parentIds = systemNodes.stream()
+            .map(BusinessCapabilitiesTreeDTO.BusinessCapabilityNode::getParentId)
+            .collect(Collectors.toSet());
+        assertThat(parentIds).hasSize(3); // 3 different parents
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test  
+    @DisplayName("Should handle L2/L3 capabilities with same names under different parents")
+    void testSameNameCapabilitiesUnderDifferentParents() {
+        // Given - Scenario where "Analytics" L2 appears under both "Customer Management" and "Sales"
+        List<BusinessCapabilityDiagramDTO> rawData = Arrays.asList(
+            createRawSystem("sys-001", "Customer Analytics", "Customer Management", "Analytics", "Customer Insights"),
+            createRawSystem("sys-002", "Sales Analytics", "Sales", "Analytics", "Sales Insights")
+        );
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then - Should create separate Analytics L2 nodes under different L1 parents
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> analyticsL2Nodes = result.getCapabilities().stream()
+            .filter(n -> "L2".equals(n.getLevel()) && "Analytics".equals(n.getName()))
+            .collect(Collectors.toList());
+        
+        assertThat(analyticsL2Nodes).hasSize(2); // Two separate Analytics L2 nodes
+        
+        // Each Analytics L2 should have different parent L1
+        Set<String> l2ParentIds = analyticsL2Nodes.stream()
+            .map(BusinessCapabilitiesTreeDTO.BusinessCapabilityNode::getParentId)
+            .collect(Collectors.toSet());
+        assertThat(l2ParentIds).hasSize(2); // Different L1 parents
+
+        // Should have 2 different L3 nodes under the different Analytics L2s
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        assertThat(l3Nodes).hasSize(2);
+        assertThat(l3Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("Customer Insights", "Sales Insights");
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle UNKNOWN capabilities from raw MongoDB data structure")
+    void testHandleUnknownCapabilitiesFromRawMongoDB() {
+        // Given - Raw data exactly like MongoDB structure you provided
+        BusinessCapabilityDiagramDTO rawSystem = new BusinessCapabilityDiagramDTO();
+        rawSystem.setSystemCode("sys-001");
+        
+        // Create complete solution overview matching your example
+        CommonSolutionReviewDTO.SolutionOverview overview = new CommonSolutionReviewDTO.SolutionOverview();
+        overview.setId("68db858493fdf8d87a3bb4e8");
+        
+        CommonSolutionReviewDTO.SolutionDetails details = new CommonSolutionReviewDTO.SolutionDetails();
+        details.setSolutionName("NextGen Platform");
+        details.setProjectName("AlphaLaunch");
+        details.setSolutionReviewCode("AWG-2025-001");
+        details.setSolutionArchitectName("Jane Doe");
+        details.setDeliveryProjectManagerName("John Smith");
+        details.setItBusinessPartner("Alice Johnson");
+        overview.setSolutionDetails(details);
+        
+        overview.setReviewedBy(null);
+        overview.setReviewType("NEW_BUILD");
+        overview.setApprovalStatus("PENDING");
+        overview.setReviewStatus("DRAFT");
+        overview.setConditions(null);
+        overview.setBusinessUnit("UNKNOWN");
+        overview.setBusinessDriver("REGULATORY");
+        overview.setValueOutcome("test");
+        overview.setApplicationUsers(Arrays.asList("EMPLOYEE", "CUSTOMERS"));
+        overview.setConcerns(Collections.emptyList());
+        rawSystem.setSolutionOverview(overview);
+        
+        // Create business capability exactly like your example
+        BusinessCapabilityDiagramDTO.BusinessCapability capability = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        capability.setId("68db858493fdf8d87a3bb4e9");
+        capability.setL1Capability("UNKNOWN");
+        capability.setL2Capability("UNKNOWN");
+        capability.setL3Capability("UNKNOWN");
+        capability.setRemarks(null);
+        rawSystem.setBusinessCapabilities(Arrays.asList(capability));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(rawSystem));
+
+        // When - Transform raw data into hierarchical tree
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then - Verify transformation from raw MongoDB structure to tree hierarchy
+        assertThat(result.getCapabilities()).hasSize(4); // L1:UNKNOWN + L2:UNKNOWN + L3:UNKNOWN + System
+
+        // Should create complete UNKNOWN hierarchy
+        Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodeMap = 
+            result.getCapabilities().stream()
+                .collect(Collectors.toMap(
+                    BusinessCapabilitiesTreeDTO.BusinessCapabilityNode::getId,
+                    node -> node
+                ));
+
+        // L1: UNKNOWN
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Unknown = nodeMap.get("l1-unknown");
+        assertThat(l1Unknown)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("UNKNOWN");
+                assertThat(node.getLevel()).isEqualTo("L1");
+                assertThat(node.getParentId()).isNull();
+                assertThat(node.getSystemCount()).isEqualTo(1);
+            });
+
+        // L2: UNKNOWN (child of L1)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Unknown = nodeMap.get("l2-unknown-under-l1-unknown");
+        assertThat(l2Unknown)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("UNKNOWN");
+                assertThat(node.getLevel()).isEqualTo("L2");
+                assertThat(node.getParentId()).isEqualTo("l1-unknown");
+                assertThat(node.getSystemCount()).isEqualTo(1);
+            });
+
+        // L3: UNKNOWN (child of L2)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Unknown = nodeMap.get("l3-unknown-under-l2-unknown-under-l1-unknown");
+        assertThat(l3Unknown)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getName()).isEqualTo("UNKNOWN");
+                assertThat(node.getLevel()).isEqualTo("L3");
+                assertThat(node.getParentId()).isEqualTo("l2-unknown-under-l1-unknown");
+                assertThat(node.getSystemCount()).isEqualTo(1);
+            });
+
+        // System: NextGen Platform (child of L3)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode system = nodeMap.get("sys-001-under-l3-unknown-under-l2-unknown-under-l1-unknown");
+        assertThat(system)
+            .isNotNull()
+            .satisfies(node -> {
+                assertThat(node.getId()).isEqualTo("sys-001-under-l3-unknown-under-l2-unknown-under-l1-unknown"); // flow-specific ID
+                assertThat(node.getName()).isEqualTo("NextGen Platform"); // solutionName from raw data
+                assertThat(node.getLevel()).isEqualTo("System");
+                assertThat(node.getParentId()).isEqualTo("l3-unknown-under-l2-unknown-under-l1-unknown");
+                assertThat(node.getSystemCount()).isNull(); // Systems don't have counts
+            });
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle UNKNOWN capabilities from raw data")
+    void testHandleUnknownCapabilities() {
+        // Given - System with UNKNOWN capabilities (like your example)
+        List<BusinessCapabilityDiagramDTO> rawData = createRawUnknownCapabilitiesData();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result.getCapabilities()).hasSize(4); // L1:UNKNOWN + L2:UNKNOWN + L3:UNKNOWN + System
+
+        // Should create UNKNOWN hierarchy
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Unknown = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()) && "UNKNOWN".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(l1Unknown).isNotNull();
+        assertThat(l1Unknown.getId()).isEqualTo("l1-unknown");
+
+        // System should be under l3-unknown
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode system = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(system.getParentId()).isEqualTo("l3-unknown-under-l2-unknown-under-l1-unknown");
+    }
+
+    @Test
+    @DisplayName("Should handle missing solution overview gracefully from raw data")
+    void testMissingSolutionOverview() {
+        // Given
+        List<BusinessCapabilityDiagramDTO> rawData = createRawDataWithMissingSolution();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode system = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .findFirst()
+            .orElseThrow();
+        
+        assertThat(system.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
+        assertThat(system.getName()).isEqualTo("Unknown Solution");
+    }
+
+    @Test
+    @DisplayName("Should handle empty business capabilities list")
+    void testEmptyBusinessCapabilities() {
+        // Given
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Collections.emptyList());
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should handle service exception gracefully")
+    void testServiceException() {
+        // Given
+        when(coreServiceClient.getBusinessCapabilities())
+            .thenThrow(new RuntimeException("Database connection failed"));
+
+        // When & Then
+        assertThatThrownBy(() -> diagramService.getBusinessCapabilitiesTree())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Failed to generate business capabilities tree")
+            .hasCauseInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("Should handle complex multi-level hierarchy from raw data")
+    void testComplexMultiLevelHierarchy() {
+        // Given - Complex scenario: 2 L1s, multiple L2s, L3s, and systems
+        List<BusinessCapabilityDiagramDTO> rawData = createRawComplexHierarchyData();
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then
+        assertThat(result.getCapabilities()).hasSizeGreaterThanOrEqualTo(8);
+
+        // Verify we have 2 distinct L1s
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .collect(Collectors.toList());
+        
+        assertThat(l1Nodes).hasSize(2);
+        assertThat(l1Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("Customer Management", "Product Management");
+
+        // Each L1 should have correct system counts
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode customerL1 = l1Nodes.stream()
+            .filter(n -> "Customer Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(customerL1.getSystemCount()).isGreaterThan(0);
+    }
+
+    // ========================================
+    // Raw Data Creation Helpers
+    // ========================================
+
+    private List<BusinessCapabilityDiagramDTO> createRawSingleSystemData() {
+        return Arrays.asList(createRawSystem(
+            "sys-001",
+            "NextGen Platform",
+            "Customer Management",
+            "CRM",
+            "Contact Management"
+        ));
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawMultipleSystemsSameL3Data() {
+        return Arrays.asList(
+            createRawSystem("sys-001", "NextGen Platform", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "Legacy CRM", "Customer Management", "CRM", "Contact Management")
+        );
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawMultipleL3sSameL2Data() {
+        return Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "Lead System", "Customer Management", "CRM", "Lead Management")
+        );
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawMultipleL2sSameL1Data() {
+        return Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "Support System", "Customer Management", "Customer Service", "Ticket Management")
+        );
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawUnknownCapabilitiesData() {
+        return Arrays.asList(createRawSystem(
+            "sys-001",
+            "NextGen Platform",
+            "UNKNOWN",
+            "UNKNOWN",
+            "UNKNOWN"
+        ));
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawDataWithMissingSolution() {
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(null); // Missing solution overview
+        system.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Customer Management", "CRM", "Contact Management")
+        ));
+        return Arrays.asList(system);
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createRawComplexHierarchyData() {
+        return Arrays.asList(
+            // Customer Management branch
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "Lead System", "Customer Management", "CRM", "Lead Management"),
+            createRawSystem("sys-003", "Support System", "Customer Management", "Customer Service", "Ticket Management"),
+            
+            // Product Management branch
+            createRawSystem("sys-004", "Catalog System", "Product Management", "Product Catalog", "Item Management"),
+            createRawSystem("sys-005", "Pricing Engine", "Product Management", "Product Catalog", "Price Management")
+        );
+    }
+
+    /**
+     * Creates a raw system DTO matching MongoDB structure
+     */
+    private BusinessCapabilityDiagramDTO createRawSystem(String systemCode, String solutionName,
+                                                         String l1, String l2, String l3) {
+        BusinessCapabilityDiagramDTO dto = new BusinessCapabilityDiagramDTO();
+        dto.setSystemCode(systemCode);
+        dto.setSolutionOverview(createSolutionOverview(solutionName));
+        dto.setBusinessCapabilities(Arrays.asList(createBusinessCapability(l1, l2, l3)));
+        return dto;
+    }
+
+    private CommonSolutionReviewDTO.SolutionOverview createSolutionOverview(String solutionName) {
+        CommonSolutionReviewDTO.SolutionOverview overview = new CommonSolutionReviewDTO.SolutionOverview();
+        
+        // Set ID like MongoDB ObjectId
+        overview.setId("68db858493fdf8d87a3bb4e8");
+        
+        // Create detailed solution details matching MongoDB structure
+        CommonSolutionReviewDTO.SolutionDetails details = new CommonSolutionReviewDTO.SolutionDetails();
+        details.setSolutionName(solutionName);
+        details.setProjectName("AlphaLaunch");
+        details.setSolutionReviewCode("AWG-2025-001");
+        details.setSolutionArchitectName("Jane Doe");
+        details.setDeliveryProjectManagerName("John Smith");
+        details.setItBusinessPartner("Alice Johnson");
+        overview.setSolutionDetails(details);
+        
+        // Set all the complete metadata from raw MongoDB structure
+        overview.setReviewedBy(null); // Matches MongoDB raw data
+        overview.setReviewType("NEW_BUILD");
+        overview.setApprovalStatus("PENDING");
+        overview.setReviewStatus("DRAFT");
+        overview.setConditions(null);
+        overview.setBusinessUnit("UNKNOWN");
+        overview.setBusinessDriver("REGULATORY");
+        overview.setValueOutcome("test");
+        overview.setApplicationUsers(Arrays.asList("EMPLOYEE", "CUSTOMERS"));
+        overview.setConcerns(Collections.emptyList());
+        
+        return overview;
+    }
+
+    private BusinessCapabilityDiagramDTO.BusinessCapability createBusinessCapability(String l1, String l2, String l3) {
+        BusinessCapabilityDiagramDTO.BusinessCapability capability = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        // Set ID like MongoDB ObjectId
+        capability.setId("68db858493fdf8d87a3bb4e9");
+        capability.setL1Capability(l1);
+        capability.setL2Capability(l2);
+        capability.setL3Capability(l3);
+        capability.setRemarks(null); // Matches MongoDB raw data structure
+        return capability;
     }
 }

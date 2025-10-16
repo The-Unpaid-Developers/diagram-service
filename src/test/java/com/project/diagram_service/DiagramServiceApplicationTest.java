@@ -3,7 +3,9 @@ package com.project.diagram_service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.*;
@@ -12,6 +14,9 @@ import static org.assertj.core.api.Assertions.*;
 @ActiveProfiles("test")
 @DisplayName("Diagram Service Application Tests")
 class DiagramServiceApplicationTest {
+
+    @Autowired
+    private ApplicationContext applicationContext;
 
     @Nested
     @DisplayName("Application Context Tests")
@@ -22,6 +27,21 @@ class DiagramServiceApplicationTest {
         void contextLoads() {
             // This test verifies that the Spring Boot application context loads correctly
             // and all beans are properly configured
+            assertThat(applicationContext).isNotNull();
+            assertThat(applicationContext.getBeanDefinitionCount()).isGreaterThan(0);
+            
+            // Verify that key service beans are present
+            assertThat(applicationContext.containsBean("diagramService"))
+                .as("DiagramService bean should be present in application context")
+                .isTrue();
+                
+            assertThat(applicationContext.containsBean("diagramController"))
+                .as("DiagramController bean should be present in application context")
+                .isTrue();
+                
+            assertThat(applicationContext.containsBean("coreServiceClient"))
+                .as("CoreServiceClient bean should be present in application context")
+                .isTrue();
         }
     }
 
