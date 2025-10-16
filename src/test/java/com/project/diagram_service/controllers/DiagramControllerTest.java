@@ -1,6 +1,9 @@
 package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO;
+import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
@@ -37,6 +40,7 @@ class DiagramControllerTest {
     private DiagramService diagramService;
 
     private List<SystemDependencyDTO> mockSystemDependencies;
+    private List<BusinessCapabilityDiagramDTO> mockBusinessCapabilities;
     private SpecificSystemDependenciesDiagramDTO mockSystemDiagram;
     private PathDiagramDTO mockPathDiagram;
 
@@ -51,28 +55,50 @@ class DiagramControllerTest {
         
         mockSystemDependencies = Arrays.asList(dependency1, dependency2);
 
+        // Setup mock business capabilities
+        BusinessCapabilityDiagramDTO capability1 = new BusinessCapabilityDiagramDTO();
+        capability1.setSystemCode("sys-002");
+        
+        CommonSolutionReviewDTO.SolutionOverview solutionOverview1 = new CommonSolutionReviewDTO.SolutionOverview();
+        solutionOverview1.setId("68db771593fdf8d87a3bb4be");
+        solutionOverview1.setApprovalStatus("PENDING");
+        solutionOverview1.setReviewStatus("DRAFT");
+        capability1.setSolutionOverview(solutionOverview1);
+        
+        BusinessCapabilityDiagramDTO.BusinessCapability businessCap1 = new BusinessCapabilityDiagramDTO.BusinessCapability();
+        businessCap1.setId("68db771593fdf8d87a3bb4bf");
+        businessCap1.setL1Capability("UNKNOWN");
+        businessCap1.setL2Capability("UNKNOWN");
+        businessCap1.setL3Capability("UNKNOWN");
+        capability1.setBusinessCapabilities(Arrays.asList(businessCap1));
+
+        BusinessCapabilityDiagramDTO capability2 = new BusinessCapabilityDiagramDTO();
+        capability2.setSystemCode("sys-003");
+        
+        mockBusinessCapabilities = Arrays.asList(capability1, capability2);
+
         // Setup mock diagram
         mockSystemDiagram = new SpecificSystemDependenciesDiagramDTO();
-        SpecificSystemDependenciesDiagramDTO.NodeDTO node1 = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO node1 = new CommonDiagramDTO.NodeDTO();
         node1.setId("SYS-001");
         node1.setName("System One");
         node1.setType("Core System");
         node1.setCriticality("Major");
 
-        SpecificSystemDependenciesDiagramDTO.NodeDTO node2 = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO node2 = new CommonDiagramDTO.NodeDTO();
         node2.setId("SYS-002-C");
         node2.setName("System Two");
         node2.setType("IncomeSystem");
         node2.setCriticality("Major");
 
-        SpecificSystemDependenciesDiagramDTO.LinkDTO link = new SpecificSystemDependenciesDiagramDTO.LinkDTO();
+        CommonDiagramDTO.DetailedLinkDTO link = new CommonDiagramDTO.DetailedLinkDTO();
         link.setSource("SYS-001");
         link.setTarget("SYS-002-C");
         link.setPattern("REST_API");
         link.setFrequency("Daily");
         link.setRole("CONSUMER");
 
-        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = new CommonDiagramDTO.ExtendedMetadataDTO();
         metadata.setCode("SYS-001");
         metadata.setReview("REV-001");
         metadata.setIntegrationMiddleware(Collections.emptyList());
@@ -84,21 +110,21 @@ class DiagramControllerTest {
         
         // Setup mock path diagram
         mockPathDiagram = new PathDiagramDTO();
-        PathDiagramDTO.NodeDTO pathNode1 = new PathDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO pathNode1 = new CommonDiagramDTO.NodeDTO();
         pathNode1.setId("SYS-001");
         pathNode1.setName("System One");
         pathNode1.setType("Core System");
         pathNode1.setCriticality("Major");
         pathNode1.setUrl("SYS-001.json");
 
-        PathDiagramDTO.NodeDTO pathNode2 = new PathDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO pathNode2 = new CommonDiagramDTO.NodeDTO();
         pathNode2.setId("SYS-002");
         pathNode2.setName("System Two");
         pathNode2.setType("IncomeSystem");
         pathNode2.setCriticality("Major");
         pathNode2.setUrl("SYS-002.json");
 
-        PathDiagramDTO.LinkDTO pathLink = new PathDiagramDTO.LinkDTO();
+        PathDiagramDTO.PathLinkDTO pathLink = new PathDiagramDTO.PathLinkDTO();
         pathLink.setSource("SYS-001");
         pathLink.setTarget("SYS-002");
         pathLink.setPattern("REST_API");
@@ -106,7 +132,7 @@ class DiagramControllerTest {
         pathLink.setRole("CONSUMER");
         pathLink.setMiddleware("API_GATEWAY");
 
-        PathDiagramDTO.MetadataDTO pathMetadata = new PathDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.ExtendedMetadataDTO pathMetadata = new CommonDiagramDTO.ExtendedMetadataDTO();
         pathMetadata.setCode("SYS-001 → SYS-002");
         pathMetadata.setReview("1 path found");
         pathMetadata.setIntegrationMiddleware(Arrays.asList("API_GATEWAY"));
@@ -148,6 +174,41 @@ class DiagramControllerTest {
                 .andExpect(status().isInternalServerError());
 
         verify(diagramService, times(1)).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should successfully get business capabilities")
+    void testGetBusinessCapabilities_Success() throws Exception {
+        // Given
+        when(diagramService.getBusinessCapabilities()).thenReturn(mockBusinessCapabilities);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].systemCode").value("sys-002"))
+                .andExpect(jsonPath("$[0].solutionOverview.approvalStatus").value("PENDING"))
+                .andExpect(jsonPath("$[0].businessCapabilities[0].l1Capability").value("UNKNOWN"))
+                .andExpect(jsonPath("$[1].systemCode").value("sys-003"));
+
+        verify(diagramService, times(1)).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle service exception when getting business capabilities")
+    void testGetBusinessCapabilities_ServiceException() throws Exception {
+        // Given
+        when(diagramService.getBusinessCapabilities()).thenThrow(new RuntimeException("Database connection failed"));
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService, times(1)).getBusinessCapabilities();
     }
 
     @Test
@@ -227,11 +288,11 @@ class DiagramControllerTest {
         // Given
         String systemCode = "SYS-ISOLATED";
         SpecificSystemDependenciesDiagramDTO diagramWithNoLinks = new SpecificSystemDependenciesDiagramDTO();
-        SpecificSystemDependenciesDiagramDTO.NodeDTO singleNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO singleNode = new CommonDiagramDTO.NodeDTO();
         singleNode.setId("SYS-ISOLATED");
         singleNode.setName("Isolated System");
         
-        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = new CommonDiagramDTO.ExtendedMetadataDTO();
         metadata.setCode("SYS-ISOLATED");
         
         diagramWithNoLinks.setNodes(Arrays.asList(singleNode));
@@ -531,26 +592,26 @@ class DiagramControllerTest {
         OverallSystemDependenciesDiagramDTO mockDiagram = new OverallSystemDependenciesDiagramDTO();
         
         // Create mock nodes
-        OverallSystemDependenciesDiagramDTO.NodeDTO node1 = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO node1 = new CommonDiagramDTO.NodeDTO();
         node1.setId("SYS-001");
         node1.setName("Core System A");
         node1.setType("Core");
         node1.setCriticality("High");
         
-        OverallSystemDependenciesDiagramDTO.NodeDTO node2 = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO node2 = new CommonDiagramDTO.NodeDTO();
         node2.setId("SYS-002");
         node2.setName("External System B");
         node2.setType("External");
         node2.setCriticality("Medium");
         
         // Create mock links
-        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+        CommonDiagramDTO.SimpleLinkDTO link = new CommonDiagramDTO.SimpleLinkDTO();
         link.setSource("SYS-001");
         link.setTarget("SYS-002");
         link.setCount(3);
         
         // Create mock metadata
-        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.BasicMetadataDTO metadata = new CommonDiagramDTO.BasicMetadataDTO();
         metadata.setGeneratedDate(LocalDate.now());
         
         mockDiagram.setNodes(List.of(node1, node2));
@@ -605,7 +666,7 @@ class DiagramControllerTest {
         OverallSystemDependenciesDiagramDTO complexDiagram = new OverallSystemDependenciesDiagramDTO();
         
         // Multiple nodes with different types
-        List<OverallSystemDependenciesDiagramDTO.NodeDTO> nodes = Arrays.asList(
+        List<CommonDiagramDTO.NodeDTO> nodes = Arrays.asList(
             createNode("SYS-001", "Payment Service", "Core", "Critical"),
             createNode("SYS-002", "User Service", "Core", "High"),
             createNode("SYS-003", "External Payment Gateway", "External", "Medium"),
@@ -613,7 +674,7 @@ class DiagramControllerTest {
         );
         
         // Multiple links with different counts
-        List<OverallSystemDependenciesDiagramDTO.LinkDTO> links = Arrays.asList(
+        List<CommonDiagramDTO.SimpleLinkDTO> links = Arrays.asList(
             createLink("SYS-001", "SYS-002", 5),
             createLink("SYS-001", "SYS-003", 2),
             createLink("SYS-002", "SYS-004", 1)
@@ -622,7 +683,7 @@ class DiagramControllerTest {
         complexDiagram.setNodes(nodes);
         complexDiagram.setLinks(links);
         
-        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.BasicMetadataDTO metadata = new CommonDiagramDTO.BasicMetadataDTO();
         metadata.setGeneratedDate(LocalDate.now());
         complexDiagram.setMetadata(metadata);
         
@@ -642,8 +703,8 @@ class DiagramControllerTest {
     }
 
     // Helper methods for creating test data
-    private OverallSystemDependenciesDiagramDTO.NodeDTO createNode(String id, String name, String type, String criticality) {
-        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+    private CommonDiagramDTO.NodeDTO createNode(String id, String name, String type, String criticality) {
+        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
         node.setId(id);
         node.setName(name);
         node.setType(type);
@@ -651,8 +712,8 @@ class DiagramControllerTest {
         return node;
     }
 
-    private OverallSystemDependenciesDiagramDTO.LinkDTO createLink(String source, String target, int count) {
-        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+    private CommonDiagramDTO.SimpleLinkDTO createLink(String source, String target, int count) {
+        CommonDiagramDTO.SimpleLinkDTO link = new CommonDiagramDTO.SimpleLinkDTO();
         link.setSource(source);
         link.setTarget(target);
         link.setCount(count);

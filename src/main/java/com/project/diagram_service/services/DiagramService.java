@@ -2,9 +2,11 @@ package com.project.diagram_service.services;
 
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -74,6 +76,21 @@ public class DiagramService {
     }
 
     /**
+     * Retrieves all business capability solution reviews from the core service.
+     *
+     * @return list of business capability solution reviews with system codes, 
+     *         solution overviews, and business capabilities
+     * @throws IllegalStateException if the core service call fails
+     */
+    public List<BusinessCapabilityDiagramDTO> getBusinessCapabilities() {
+        log.info("Calling core service for business capabilities");
+
+        List<BusinessCapabilityDiagramDTO> result = coreServiceClient.getBusinessCapabilities();
+        log.info("Retrieved {} business capability solution reviews", result.size());
+        return result;
+    }
+
+    /**
      * Generates a system dependencies diagram showing integration flows and
      * relationships.
      *
@@ -105,7 +122,7 @@ public class DiagramService {
         DiagramComponents components = initializeDiagramComponents(systemCode, primarySystem);
         processAllIntegrationFlows(systemCode, allDependencies, components);
 
-        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = buildMetadata(systemCode, primarySystem, components.nodes());
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = buildMetadata(systemCode, primarySystem, components.nodes());
         SpecificSystemDependenciesDiagramDTO diagram = assembleDiagram(components, metadata);
 
         log.info("Generated diagram with {} nodes and {} links for system {}",
@@ -477,7 +494,7 @@ public class DiagramService {
         }
 
         PathDiagramComponents components = buildPathDiagramComponentsWithDirectLinks(paths, allDependencies);
-        PathDiagramDTO.MetadataDTO metadata = createPathDiagramMetadata(startSystem, endSystem, paths.size(),
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = createPathDiagramMetadata(startSystem, endSystem, paths.size(),
                 components.middleware());
 
         return assemblePathDiagram(components, metadata);
@@ -510,9 +527,9 @@ public class DiagramService {
      * @param middleware  the set of middleware components used
      * @return the metadata DTO
      */
-    private PathDiagramDTO.MetadataDTO createPathDiagramMetadata(String startSystem, String endSystem,
+    private CommonDiagramDTO.ExtendedMetadataDTO createPathDiagramMetadata(String startSystem, String endSystem,
             int pathCount, Set<String> middleware) {
-        PathDiagramDTO.MetadataDTO metadata = new PathDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = new CommonDiagramDTO.ExtendedMetadataDTO();
         metadata.setCode(startSystem + PATH_SEPARATOR + endSystem);
         metadata.setReview(formatPathCount(pathCount));
         metadata.setIntegrationMiddleware(new ArrayList<>(middleware));
@@ -524,8 +541,8 @@ public class DiagramService {
     /**
      * Record to hold diagram components during construction.
      */
-    private record DiagramComponents(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes,
-            List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links,
+    private record DiagramComponents(List<CommonDiagramDTO.NodeDTO> nodes,
+            List<CommonDiagramDTO.DetailedLinkDTO> links,
             Set<String> middleware,
             Set<String> processedLinks) {
     }
@@ -533,8 +550,8 @@ public class DiagramService {
     /**
      * Record to hold path diagram components with direct links during construction.
      */
-    private record PathDiagramComponents(List<PathDiagramDTO.NodeDTO> nodes,
-            List<PathDiagramDTO.LinkDTO> links,
+    private record PathDiagramComponents(List<CommonDiagramDTO.NodeDTO> nodes,
+            List<PathDiagramDTO.PathLinkDTO> links,
             Set<String> middleware) {
     }
 
@@ -549,7 +566,7 @@ public class DiagramService {
             List<SystemDependencyDTO> allDependencies) {
         Set<String> allSystemsInPaths = new HashSet<>();
         Set<String> middlewareNames = new HashSet<>();
-        Map<String, PathDiagramDTO.LinkDTO> uniqueLinks = new HashMap<>();
+        Map<String, PathDiagramDTO.PathLinkDTO> uniqueLinks = new HashMap<>();
 
         // Process all path segments to create direct system-to-system links with deduplication
         for (Path path : paths) {
@@ -557,10 +574,10 @@ public class DiagramService {
         }
 
         // Convert map to list
-        List<PathDiagramDTO.LinkDTO> links = new ArrayList<>(uniqueLinks.values());
+        List<PathDiagramDTO.PathLinkDTO> links = new ArrayList<>(uniqueLinks.values());
 
         // Create nodes only for systems (not middleware)
-        List<PathDiagramDTO.NodeDTO> nodes = createPathNodes(allSystemsInPaths, allDependencies);
+        List<CommonDiagramDTO.NodeDTO> nodes = createPathNodes(allSystemsInPaths, allDependencies);
 
         return new PathDiagramComponents(nodes, links, middlewareNames);
     }
@@ -572,7 +589,7 @@ public class DiagramService {
      * @param metadata   the diagram metadata
      * @return the complete PathDiagramDTO
      */
-    private PathDiagramDTO assemblePathDiagram(PathDiagramComponents components, PathDiagramDTO.MetadataDTO metadata) {
+    private PathDiagramDTO assemblePathDiagram(PathDiagramComponents components, CommonDiagramDTO.ExtendedMetadataDTO metadata) {
         PathDiagramDTO diagram = new PathDiagramDTO();
         diagram.setNodes(components.nodes());
         diagram.setLinks(components.links());
@@ -589,7 +606,7 @@ public class DiagramService {
      * @param uniqueLinks       map to store unique links by identifier
      */
     private void processPathForDirectLinksWithDeduplication(Path path, Set<String> allSystemsInPaths,
-            Set<String> middlewareNames, Map<String, PathDiagramDTO.LinkDTO> uniqueLinks) {
+            Set<String> middlewareNames, Map<String, PathDiagramDTO.PathLinkDTO> uniqueLinks) {
         for (PathSegment segment : path.segments()) {
             String source = segment.source();
             String target = segment.target();
@@ -609,7 +626,7 @@ public class DiagramService {
             
             // Only add the link if we haven't seen this exact link before
             if (!uniqueLinks.containsKey(linkId)) {
-                PathDiagramDTO.LinkDTO link = createPathDiagramLink(source, target, originalFlow);
+                PathDiagramDTO.PathLinkDTO link = createPathDiagramLink(source, target, originalFlow);
                 uniqueLinks.put(linkId, link);
             }
         }
@@ -622,12 +639,12 @@ public class DiagramService {
      * @param allDependencies   all system dependencies
      * @return list of created path nodes
      */
-    private List<PathDiagramDTO.NodeDTO> createPathNodes(Set<String> allSystemsInPaths,
+    private List<CommonDiagramDTO.NodeDTO> createPathNodes(Set<String> allSystemsInPaths,
             List<SystemDependencyDTO> allDependencies) {
-        List<PathDiagramDTO.NodeDTO> nodes = new ArrayList<>();
+        List<CommonDiagramDTO.NodeDTO> nodes = new ArrayList<>();
 
         for (String systemId : allSystemsInPaths) {
-            PathDiagramDTO.NodeDTO node = createPathDiagramNode(systemId, allDependencies);
+            CommonDiagramDTO.NodeDTO node = createPathDiagramNode(systemId, allDependencies);
             nodes.add(node);
         }
 
@@ -642,9 +659,9 @@ public class DiagramService {
      * @param flow   the integration flow
      * @return the created link DTO
      */
-    private PathDiagramDTO.LinkDTO createPathDiagramLink(String source, String target,
+    private PathDiagramDTO.PathLinkDTO createPathDiagramLink(String source, String target,
             SystemDependencyDTO.IntegrationFlow flow) {
-        PathDiagramDTO.LinkDTO link = new PathDiagramDTO.LinkDTO();
+        PathDiagramDTO.PathLinkDTO link = new PathDiagramDTO.PathLinkDTO();
         link.setSource(source);
         link.setTarget(target);
         link.setPattern(flow.getIntegrationMethod());
@@ -661,8 +678,8 @@ public class DiagramService {
      * @param allDependencies all system dependencies
      * @return the created node DTO
      */
-    private PathDiagramDTO.NodeDTO createPathDiagramNode(String systemId, List<SystemDependencyDTO> allDependencies) {
-        PathDiagramDTO.NodeDTO node = new PathDiagramDTO.NodeDTO();
+    private CommonDiagramDTO.NodeDTO createPathDiagramNode(String systemId, List<SystemDependencyDTO> allDependencies) {
+        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
         node.setId(systemId);
 
         String systemName = findSystemNameFromDependencies(systemId, allDependencies);
@@ -697,7 +714,7 @@ public class DiagramService {
      * @return initialized diagram components
      */
     private DiagramComponents initializeDiagramComponents(String systemCode, SystemDependencyDTO primarySystem) {
-        List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes = new ArrayList<>();
+        List<CommonDiagramDTO.NodeDTO> nodes = new ArrayList<>();
         nodes.add(createPrimarySystemNode(systemCode, primarySystem));
 
         return new DiagramComponents(
@@ -796,10 +813,10 @@ public class DiagramService {
      * @param nodes         the diagram nodes
      * @return the metadata
      */
-    private SpecificSystemDependenciesDiagramDTO.MetadataDTO buildMetadata(String systemCode,
+    private CommonDiagramDTO.ExtendedMetadataDTO buildMetadata(String systemCode,
             SystemDependencyDTO primarySystem,
-            List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes) {
-        SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata = new SpecificSystemDependenciesDiagramDTO.MetadataDTO();
+            List<CommonDiagramDTO.NodeDTO> nodes) {
+        CommonDiagramDTO.ExtendedMetadataDTO metadata = new CommonDiagramDTO.ExtendedMetadataDTO();
         metadata.setCode(systemCode);
         metadata.setReview(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionReviewCode());
         metadata.setIntegrationMiddleware(extractMiddlewareList(nodes));
@@ -813,10 +830,10 @@ public class DiagramService {
      * @param nodes the diagram nodes
      * @return list of middleware node IDs
      */
-    private List<String> extractMiddlewareList(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes) {
+    private List<String> extractMiddlewareList(List<CommonDiagramDTO.NodeDTO> nodes) {
         return nodes.stream()
                 .filter(node -> MIDDLEWARE_TYPE.equals(node.getType()))
-                .map(SpecificSystemDependenciesDiagramDTO.NodeDTO::getId)
+                .map(CommonDiagramDTO.NodeDTO::getId)
                 .toList();
     }
 
@@ -828,7 +845,7 @@ public class DiagramService {
      * @return the complete diagram
      */
     private static SpecificSystemDependenciesDiagramDTO assembleDiagram(DiagramComponents components,
-            SpecificSystemDependenciesDiagramDTO.MetadataDTO metadata) {
+            CommonDiagramDTO.ExtendedMetadataDTO metadata) {
         SpecificSystemDependenciesDiagramDTO diagram = new SpecificSystemDependenciesDiagramDTO();
         diagram.setNodes(components.nodes());
         diagram.setLinks(components.links());
@@ -839,8 +856,8 @@ public class DiagramService {
     /**
      * Creates the primary system node.
      */
-    private SpecificSystemDependenciesDiagramDTO.NodeDTO createPrimarySystemNode(String systemCode, SystemDependencyDTO primarySystem) {
-        SpecificSystemDependenciesDiagramDTO.NodeDTO primaryNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+    private CommonDiagramDTO.NodeDTO createPrimarySystemNode(String systemCode, SystemDependencyDTO primarySystem) {
+        CommonDiagramDTO.NodeDTO primaryNode = new CommonDiagramDTO.NodeDTO();
         primaryNode.setId(systemCode);
         primaryNode.setName(primarySystem.getSolutionOverview().getSolutionDetails().getSolutionName());
         primaryNode.setType(CORE_SYSTEM_TYPE);
@@ -953,13 +970,13 @@ public class DiagramService {
      * @param middlewareNodeId the middleware node ID
      * @param middlewareName   the middleware name
      */
-    private void addMiddlewareNodeIfNeeded(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes,
+    private void addMiddlewareNodeIfNeeded(List<CommonDiagramDTO.NodeDTO> nodes,
             String middlewareNodeId, String middlewareName) {
         if (nodeExists(nodes, middlewareNodeId)) {
             return;
         }
 
-        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = createMiddlewareNode(middlewareNodeId, middlewareName);
+        CommonDiagramDTO.NodeDTO middlewareNode = createMiddlewareNode(middlewareNodeId, middlewareName);
         nodes.add(middlewareNode);
     }
 
@@ -970,8 +987,8 @@ public class DiagramService {
      * @param middlewareName   the middleware name
      * @return the created middleware node
      */
-    private SpecificSystemDependenciesDiagramDTO.NodeDTO createMiddlewareNode(String middlewareNodeId, String middlewareName) {
-        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+    private CommonDiagramDTO.NodeDTO createMiddlewareNode(String middlewareNodeId, String middlewareName) {
+        CommonDiagramDTO.NodeDTO middlewareNode = new CommonDiagramDTO.NodeDTO();
         middlewareNode.setId(middlewareNodeId);
         middlewareNode.setName(middlewareName);
         middlewareNode.setType(MIDDLEWARE_TYPE);
@@ -982,9 +999,9 @@ public class DiagramService {
     /**
      * Creates a link DTO.
      */
-    private SpecificSystemDependenciesDiagramDTO.LinkDTO createLink(String source, String target,
+    private CommonDiagramDTO.DetailedLinkDTO createLink(String source, String target,
             SystemDependencyDTO.IntegrationFlow flow, String role) {
-        SpecificSystemDependenciesDiagramDTO.LinkDTO link = new SpecificSystemDependenciesDiagramDTO.LinkDTO();
+        CommonDiagramDTO.DetailedLinkDTO link = new CommonDiagramDTO.DetailedLinkDTO();
         link.setSource(source);
         link.setTarget(target);
         link.setPattern(flow.getIntegrationMethod());
@@ -1003,7 +1020,7 @@ public class DiagramService {
      * @param primarySystemCode the primary system code
      * @param allDependencies   all system dependencies
      */
-    private void addSystemNodeIfNeeded(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String nodeId,
+    private void addSystemNodeIfNeeded(List<CommonDiagramDTO.NodeDTO> nodes, String nodeId,
             String systemCode, String primarySystemCode,
             List<SystemDependencyDTO> allDependencies) {
         if (systemCode.equals(primarySystemCode) || nodeExists(nodes, nodeId)) {
@@ -1011,7 +1028,7 @@ public class DiagramService {
         }
 
         SystemDependencyDTO systemData = findSystemData(systemCode, allDependencies);
-        SpecificSystemDependenciesDiagramDTO.NodeDTO node = createSystemNode(nodeId, systemCode, systemData, allDependencies);
+        CommonDiagramDTO.NodeDTO node = createSystemNode(nodeId, systemCode, systemData, allDependencies);
         nodes.add(node);
     }
 
@@ -1022,7 +1039,7 @@ public class DiagramService {
      * @param nodeId the node ID to check
      * @return true if node exists
      */
-    private static boolean nodeExists(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String nodeId) {
+    private static boolean nodeExists(List<CommonDiagramDTO.NodeDTO> nodes, String nodeId) {
         return nodes.stream().anyMatch(node -> nodeId.equals(node.getId()));
     }
 
@@ -1049,10 +1066,10 @@ public class DiagramService {
      * @param allDependencies all system dependencies
      * @return the created node
      */
-    private SpecificSystemDependenciesDiagramDTO.NodeDTO createSystemNode(String nodeId, String systemCode,
+    private CommonDiagramDTO.NodeDTO createSystemNode(String nodeId, String systemCode,
             SystemDependencyDTO systemData,
             List<SystemDependencyDTO> allDependencies) {
-        SpecificSystemDependenciesDiagramDTO.NodeDTO node = new SpecificSystemDependenciesDiagramDTO.NodeDTO();
+        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
         node.setId(nodeId);
         node.setName(systemData != null ? systemData.getSolutionOverview().getSolutionDetails().getSolutionName()
                 : systemCode);
@@ -1066,7 +1083,7 @@ public class DiagramService {
      */
     private void processFlow(SystemDependencyDTO.IntegrationFlow flow, FlowDirection flowDirection,
             String primarySystemCode, Set<String> middleware,
-            List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links) {
+            List<CommonDiagramDTO.NodeDTO> nodes, List<CommonDiagramDTO.DetailedLinkDTO> links) {
 
         // Handle middleware
         if (hasValidMiddleware(flow.getMiddleware())) {
@@ -1113,15 +1130,15 @@ public class DiagramService {
         
         List<SystemDependencyDTO> allDependencies = getSystemDependencies();
         OverallSystemDependenciesDiagramDTO results = extractUniqueLinksAndNodes(allDependencies);
-        OverallSystemDependenciesDiagramDTO.MetadataDTO metadata = new OverallSystemDependenciesDiagramDTO.MetadataDTO();
+        CommonDiagramDTO.BasicMetadataDTO metadata = new CommonDiagramDTO.BasicMetadataDTO();
         metadata.setGeneratedDate(LocalDate.now());
         results.setMetadata(metadata);
         return results;
     }
 
     private OverallSystemDependenciesDiagramDTO extractUniqueLinksAndNodes(List<SystemDependencyDTO> allDependencies) {
-        List<OverallSystemDependenciesDiagramDTO.LinkDTO> uniqueLinks = new ArrayList<>();
-        List<OverallSystemDependenciesDiagramDTO.NodeDTO> uniqueNodes = new ArrayList<>();
+        List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks = new ArrayList<>();
+        List<CommonDiagramDTO.NodeDTO> uniqueNodes = new ArrayList<>();
         Map<String, Integer> linkIdentifiers = new HashMap<>();
         Set<String> nodeIdentifiers = new HashSet<>();
 
@@ -1132,7 +1149,7 @@ public class DiagramService {
                     String reverseLinkId = flow.getCounterpartSystemCode() + "-" + system.getSystemCode();
                     if (!(linkIdentifiers.containsKey(linkId) || linkIdentifiers.containsKey(reverseLinkId))) {
                         linkIdentifiers.put(linkId, 1);
-                        OverallSystemDependenciesDiagramDTO.LinkDTO link = new OverallSystemDependenciesDiagramDTO.LinkDTO();
+                        CommonDiagramDTO.SimpleLinkDTO link = new CommonDiagramDTO.SimpleLinkDTO();
                         link.setSource(system.getSystemCode());
                         link.setTarget(flow.getCounterpartSystemCode());
                         uniqueLinks.add(link);
@@ -1145,7 +1162,7 @@ public class DiagramService {
                     }
                     if (!nodeIdentifiers.contains(system.getSystemCode())) {
                         nodeIdentifiers.add(system.getSystemCode());
-                        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+                        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
                         node.setId(system.getSystemCode());
                         node.setName(system.getSolutionOverview().getSolutionDetails().getSolutionName());
                         node.setType(CORE_SYSTEM_TYPE);
@@ -1154,7 +1171,7 @@ public class DiagramService {
                     }
                     if (!nodeIdentifiers.contains(flow.getCounterpartSystemCode())) {
                         nodeIdentifiers.add(flow.getCounterpartSystemCode());
-                        OverallSystemDependenciesDiagramDTO.NodeDTO node = new OverallSystemDependenciesDiagramDTO.NodeDTO();
+                        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
                         node.setId(flow.getCounterpartSystemCode());
                         node.setName(flow.getCounterpartSystemCode());
                         node.setType(EXTERNAL_SYSTEM_TYPE);
@@ -1165,7 +1182,7 @@ public class DiagramService {
             }
         }
 
-        for (OverallSystemDependenciesDiagramDTO.LinkDTO link : uniqueLinks) {
+        for (CommonDiagramDTO.SimpleLinkDTO link : uniqueLinks) {
             String linkId = link.getSource() + "-" + link.getTarget();
             String reverseLinkId = link.getTarget() + "-" + link.getSource();
             if (linkIdentifiers.containsKey(linkId)) {
