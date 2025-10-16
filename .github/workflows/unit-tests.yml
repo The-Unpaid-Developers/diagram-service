@@ -36,7 +36,10 @@ jobs:
           restore-keys: ${{ runner.os }}-m2
 
       - name: Run unit tests
-        run: mvn clean test -Dspring.profiles.active=test
+        run: |
+          mvn clean test \
+            -Dtest='!**/*IntegrationTest,!**/integration/**' \
+            -Dspring.profiles.active=test
 
       - name: Generate test report
         uses: dorny/test-reporter@v1
