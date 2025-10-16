@@ -5,6 +5,8 @@ import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
+import com.project.diagram_service.dto.common.CommonSolutionReviewDTO;
+import com.project.diagram_service.dto.common.CommonDiagramDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -99,19 +101,19 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getGeneratedDate()).isEqualTo(LocalDate.now());
         
         // Verify primary system node
-        SpecificSystemDependenciesDiagramDTO.NodeDTO primaryNode = findNodeById(result.getNodes(), "SYS-001");
+        CommonDiagramDTO.NodeDTO primaryNode = findNodeById(result.getNodes(), "SYS-001");
         assertThat(primaryNode).isNotNull();
         assertThat(primaryNode.getName()).isEqualTo("Primary System");
         assertThat(primaryNode.getType()).isEqualTo("Core System");
         
         // Verify external system node (with consumer suffix)
-        SpecificSystemDependenciesDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-002-C");
+        CommonDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-002-C");
         assertThat(externalNode).isNotNull();
         assertThat(externalNode.getName()).isEqualTo("External System");
         assertThat(externalNode.getType()).isEqualTo("IncomeSystem");
         
         // Verify link
-        SpecificSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        CommonDiagramDTO.DetailedLinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002-C");
         assertThat(link.getPattern()).isEqualTo("REST_API");
@@ -139,7 +141,7 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Two middleware links
         
         // Verify middleware node
-        SpecificSystemDependenciesDiagramDTO.NodeDTO middlewareNode = findNodeById(result.getNodes(), "API_GATEWAY-C");
+        CommonDiagramDTO.NodeDTO middlewareNode = findNodeById(result.getNodes(), "API_GATEWAY-C");
         assertThat(middlewareNode).isNotNull();
         assertThat(middlewareNode.getName()).isEqualTo("API_GATEWAY");
         assertThat(middlewareNode.getType()).isEqualTo("Middleware");
@@ -149,7 +151,7 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY-C");
         
         // Verify links
-        List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links = result.getLinks();
+        List<CommonDiagramDTO.DetailedLinkDTO> links = result.getLinks();
         assertThat(links).anyMatch(link -> 
             "SYS-001".equals(link.getSource()) && "API_GATEWAY-C".equals(link.getTarget()));
         assertThat(links).anyMatch(link -> 
@@ -185,14 +187,14 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2); // Two direct links
         
         // Verify external system nodes with different roles
-        SpecificSystemDependenciesDiagramDTO.NodeDTO externalConsumerNode = findNodeById(result.getNodes(), "SYS-002-C");
-        SpecificSystemDependenciesDiagramDTO.NodeDTO externalProducerNode = findNodeById(result.getNodes(), "SYS-002-P");
+        CommonDiagramDTO.NodeDTO externalConsumerNode = findNodeById(result.getNodes(), "SYS-002-C");
+        CommonDiagramDTO.NodeDTO externalProducerNode = findNodeById(result.getNodes(), "SYS-002-P");
         
         assertThat(externalConsumerNode).isNotNull();
         assertThat(externalProducerNode).isNotNull();
         
         // Verify links
-        List<SpecificSystemDependenciesDiagramDTO.LinkDTO> links = result.getLinks();
+        List<CommonDiagramDTO.DetailedLinkDTO> links = result.getLinks();
         assertThat(links).anyMatch(link -> 
             "SYS-001".equals(link.getSource()) && "SYS-002-C".equals(link.getTarget()));
         assertThat(links).anyMatch(link -> 
@@ -218,7 +220,7 @@ class DiagramServiceTest {
         assertThat(result).isNotNull();
         
         // Verify external system node (not in our data)
-        SpecificSystemDependenciesDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-999-C");
+        CommonDiagramDTO.NodeDTO externalNode = findNodeById(result.getNodes(), "SYS-999-C");
         assertThat(externalNode).isNotNull();
         assertThat(externalNode.getName()).isEqualTo("SYS-999"); // Uses system code as name
         assertThat(externalNode.getType()).isEqualTo("External"); // External type since not in our data
@@ -361,7 +363,7 @@ class DiagramServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.getNodes()).hasSize(1);
         assertThat(result.getLinks()).isEmpty();
-        SpecificSystemDependenciesDiagramDTO.NodeDTO coreNode = result.getNodes().get(0);
+        CommonDiagramDTO.NodeDTO coreNode = result.getNodes().get(0);
         assertThat(coreNode.getId()).isEqualTo(targetSystemCode);
         assertThat(coreNode.getType()).isEqualTo("Core System");
     }
@@ -440,7 +442,7 @@ class DiagramServiceTest {
         SystemDependencyDTO systemWithNullDetails = new SystemDependencyDTO();
         systemWithNullDetails.setSystemCode("SYS-001");
         
-        SystemDependencyDTO.SolutionOverview overview = new SystemDependencyDTO.SolutionOverview();
+        CommonSolutionReviewDTO.SolutionOverview overview = new CommonSolutionReviewDTO.SolutionOverview();
         overview.setSolutionDetails(null);
         systemWithNullDetails.setSolutionOverview(overview);
         systemWithNullDetails.setIntegrationFlows(Collections.emptyList());
@@ -482,7 +484,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSizeGreaterThan(5);
         
         // Should have multiple middleware types
-        List<SpecificSystemDependenciesDiagramDTO.NodeDTO> middlewareNodes = result.getNodes().stream()
+        List<CommonDiagramDTO.NodeDTO> middlewareNodes = result.getNodes().stream()
             .filter(node -> "Middleware".equals(node.getType()))
             .toList();
         assertThat(middlewareNodes).hasSizeGreaterThanOrEqualTo(3);
@@ -501,8 +503,8 @@ class DiagramServiceTest {
         SystemDependencyDTO system = new SystemDependencyDTO();
         system.setSystemCode(systemCode);
         
-        SystemDependencyDTO.SolutionOverview solutionOverview = new SystemDependencyDTO.SolutionOverview();
-        SystemDependencyDTO.SolutionDetails solutionDetails = new SystemDependencyDTO.SolutionDetails();
+        CommonSolutionReviewDTO.SolutionOverview solutionOverview = new CommonSolutionReviewDTO.SolutionOverview();
+        CommonSolutionReviewDTO.SolutionDetails solutionDetails = new CommonSolutionReviewDTO.SolutionDetails();
         solutionDetails.setSolutionName(systemName);
         solutionDetails.setSolutionReviewCode(reviewCode);
         solutionOverview.setSolutionDetails(solutionDetails);
@@ -549,7 +551,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         
         // Find the consumer node - should use system code as name when data not found
-        SpecificSystemDependenciesDiagramDTO.NodeDTO consumerNode = result.getNodes().stream()
+        CommonDiagramDTO.NodeDTO consumerNode = result.getNodes().stream()
             .filter(node -> node.getId().equals("SYS-999-C"))
             .findFirst()
             .orElse(null);
@@ -627,7 +629,7 @@ class DiagramServiceTest {
         
         // Should not have duplicate nodes for the same system with same role
         List<String> nodeIds = result.getNodes().stream()
-            .map(SpecificSystemDependenciesDiagramDTO.NodeDTO::getId)
+            .map(CommonDiagramDTO.NodeDTO::getId)
             .toList();
         assertThat(nodeIds).doesNotHaveDuplicates();
         
@@ -720,7 +722,7 @@ class DiagramServiceTest {
         assertThat(hasConsumerLink).isTrue();
     }
 
-    private SpecificSystemDependenciesDiagramDTO.NodeDTO findNodeById(List<SpecificSystemDependenciesDiagramDTO.NodeDTO> nodes, String id) {
+    private CommonDiagramDTO.NodeDTO findNodeById(List<CommonDiagramDTO.NodeDTO> nodes, String id) {
         return nodes.stream()
             .filter(node -> id.equals(node.getId()))
             .findFirst()
@@ -747,7 +749,7 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(1);
         
         // Verify direct connection
-        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        PathDiagramDTO.PathLinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002");
         assertThat(link.getPattern()).isEqualTo("REST_API");
@@ -780,7 +782,7 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getIntegrationMiddleware()).contains("API_GATEWAY");
         
         // Verify the link has middleware information
-        PathDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        PathDiagramDTO.PathLinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002");
         assertThat(link.getMiddleware()).isEqualTo("API_GATEWAY");
@@ -1192,7 +1194,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         assertThat(result.getLinks()).hasSize(1); // Should be deduplicated to 1 link
         
-        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        CommonDiagramDTO.SimpleLinkDTO link = result.getLinks().get(0);
         assertThat(link.getCount()).isEqualTo(2); // Count should reflect both directions
         assertThat(link.getSource()).isIn("SYS-001", "SYS-002");
         assertThat(link.getTarget()).isIn("SYS-001", "SYS-002");
@@ -1224,7 +1226,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         assertThat(result.getLinks()).hasSize(1);
         
-        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        CommonDiagramDTO.SimpleLinkDTO link = result.getLinks().get(0);
         assertThat(link.getCount()).isEqualTo(3); // Should count all 3 flows
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002");
@@ -1252,7 +1254,7 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(2);
 
         // Verify core system classification
-        OverallSystemDependenciesDiagramDTO.NodeDTO coreNode = result.getNodes().stream()
+        CommonDiagramDTO.NodeDTO coreNode = result.getNodes().stream()
                 .filter(n -> "SYS-001".equals(n.getId()))
                 .findFirst()
                 .orElseThrow();
@@ -1261,7 +1263,7 @@ class DiagramServiceTest {
         assertThat(coreNode.getCriticality()).isNotNull();
 
         // Verify external systems classification
-        List<OverallSystemDependenciesDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
+        List<CommonDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
                 .filter(n -> "External".equals(n.getType()))
                 .toList();
         assertThat(externalNodes).hasSize(2);
@@ -1370,14 +1372,14 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSizeGreaterThanOrEqualTo(4); // At least 1 Core + 3 External minimum
         
         // Verify at least one core system exists
-        List<OverallSystemDependenciesDiagramDTO.NodeDTO> coreNodes = result.getNodes().stream()
+        List<CommonDiagramDTO.NodeDTO> coreNodes = result.getNodes().stream()
                 .filter(n -> "Core System".equals(n.getType()))
                 .toList();
         assertThat(coreNodes).hasSizeGreaterThanOrEqualTo(1);
         assertThat(coreNodes).allMatch(n -> n.getName() != null && !n.getName().isEmpty());
 
         // Verify external systems exist
-        List<OverallSystemDependenciesDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
+        List<CommonDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
                 .filter(n -> "External".equals(n.getType()))
                 .toList();
         assertThat(externalNodes).hasSizeGreaterThanOrEqualTo(3);
@@ -1410,7 +1412,7 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSize(2);
         assertThat(result.getLinks()).hasSize(1);
         
-        OverallSystemDependenciesDiagramDTO.LinkDTO link = result.getLinks().get(0);
+        CommonDiagramDTO.SimpleLinkDTO link = result.getLinks().get(0);
         assertThat(link.getSource()).isEqualTo("SYS-001");
         assertThat(link.getTarget()).isEqualTo("SYS-002");
         assertThat(link.getCount()).isEqualTo(4); // All 4 different integration patterns counted
@@ -1449,13 +1451,13 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(5); // 2 from SYS-001->SYS-002 + 3 from SYS-002->SYS-003
         
         // Find links from SYS-001 to SYS-002
-        List<PathDiagramDTO.LinkDTO> links1to2 = result.getLinks().stream()
+        List<PathDiagramDTO.PathLinkDTO> links1to2 = result.getLinks().stream()
             .filter(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()))
             .toList();
         assertThat(links1to2).hasSize(2); // REST_API and MESSAGING flows
         
         // Find links from SYS-002 to SYS-003
-        List<PathDiagramDTO.LinkDTO> links2to3 = result.getLinks().stream()
+        List<PathDiagramDTO.PathLinkDTO> links2to3 = result.getLinks().stream()
             .filter(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()))
             .toList();
         assertThat(links2to3).hasSize(3); // SOAP, FILE_TRANSFER, and DATABASE flows
@@ -1657,12 +1659,12 @@ class DiagramServiceTest {
         assertThat(result.getLinks()).hasSize(4); // 3 distinct from SYS-001->SYS-002 + 1 deduplicated from SYS-002->SYS-003
         
         // Verify we have the expected links
-        List<PathDiagramDTO.LinkDTO> links1to2 = result.getLinks().stream()
+        List<PathDiagramDTO.PathLinkDTO> links1to2 = result.getLinks().stream()
             .filter(link -> "SYS-001".equals(link.getSource()) && "SYS-002".equals(link.getTarget()))
             .toList();
         assertThat(links1to2).hasSize(3); // All 3 distinct flows preserved
         
-        List<PathDiagramDTO.LinkDTO> links2to3 = result.getLinks().stream()
+        List<PathDiagramDTO.PathLinkDTO> links2to3 = result.getLinks().stream()
             .filter(link -> "SYS-002".equals(link.getSource()) && "SYS-003".equals(link.getTarget()))
             .toList();
         assertThat(links2to3).hasSize(1); // Two identical flows deduplicated to one

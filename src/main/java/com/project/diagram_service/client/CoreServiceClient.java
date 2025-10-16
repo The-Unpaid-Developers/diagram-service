@@ -1,6 +1,7 @@
 package com.project.diagram_service.client;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -60,6 +61,31 @@ public class CoreServiceClient {
             HttpMethod.GET,
             null,
             new ParameterizedTypeReference<List<SystemDependencyDTO>>() {}
+        ).getBody();
+    }
+    
+    /**
+     * Retrieves all business capability solution reviews from the core service.
+     *
+     * This method makes an HTTP GET request to the core service's business capabilities
+     * endpoint and returns a list of all active solution reviews with their essential fields:
+     * system code, solution overview, and business capabilities.
+     *
+     * The method uses RestTemplate for synchronous HTTP communication and returns
+     * only solution reviews with ACTIVE document state, providing business capability
+     * mapping information for organizational analysis.
+     *
+     * @return a {@link List} of {@link BusinessCapabilityDiagramDTO} containing business capability data
+     * @throws org.springframework.web.client.RestClientException if the HTTP request fails
+     * @throws RuntimeException if there's an error during the request or response processing
+     */
+    public List<BusinessCapabilityDiagramDTO> getBusinessCapabilities() {
+        String url = baseUrl + "/api/v1/solution-review/business-capabilities";
+        return restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            null,
+            new ParameterizedTypeReference<List<BusinessCapabilityDiagramDTO>>() {}
         ).getBody();
     }
 }

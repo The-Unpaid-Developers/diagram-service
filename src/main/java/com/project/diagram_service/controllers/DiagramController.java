@@ -1,6 +1,7 @@
 package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
@@ -49,6 +50,38 @@ public class DiagramController {
             return ResponseEntity.ok(dependencies);
         } catch (Exception e) {
             log.error("Error getting system dependencies: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * Retrieves all business capability solution reviews from the core service.
+     *
+     * This endpoint returns a comprehensive list of all active solution reviews in the organization
+     * along with their business capabilities, solution overviews, and related metadata.
+     *
+     * The response includes detailed information about each system including:
+     *   System identification and business details
+     *   Solution review status and approval information
+     *   Business capability mappings (L1, L2, L3 capabilities)
+     *   Solution architecture and project management details
+     *   Concerns and follow-up items
+     *
+     * Only solution reviews with ACTIVE document state are returned, providing
+     * current business capability mapping for organizational analysis and reporting.
+     *
+     * @return a {@link ResponseEntity} containing a list of {@link BusinessCapabilityDiagramDTO}
+     *         with HTTP 200 on success, or HTTP 500 on internal server error
+     */
+    @GetMapping("/business-capabilities")
+    public ResponseEntity<List<BusinessCapabilityDiagramDTO>> getBusinessCapabilities() {
+        log.info("Received request for business capabilities");
+        
+        try {
+            List<BusinessCapabilityDiagramDTO> capabilities = diagramService.getBusinessCapabilities();
+            return ResponseEntity.ok(capabilities);
+        } catch (Exception e) {
+            log.error("Error getting business capabilities: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

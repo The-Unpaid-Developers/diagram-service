@@ -1,37 +1,12 @@
 package com.project.diagram_service.dto;
 
+import com.project.diagram_service.dto.common.CommonDiagramDTO;
 import lombok.Data;
-import java.time.LocalDate;
 import java.util.List;
 
 @Data
 public class SpecificSystemDependenciesDiagramDTO {
-    private List<NodeDTO> nodes;
-    private List<LinkDTO> links;
-    private MetadataDTO metadata;
-    
-    @Data
-    public static class NodeDTO {
-        private String id;
-        private String name;
-        private String type;
-        private String criticality;
-    }
-    
-    @Data
-    public static class LinkDTO {
-        private String source;
-        private String target;
-        private String pattern;
-        private String frequency;
-        private String role;
-    }
-    
-    @Data
-    public static class MetadataDTO {
-        private String code;
-        private String review;
-        private List<String> integrationMiddleware;
-        private LocalDate generatedDate;
-    }
+    private List<CommonDiagramDTO.NodeDTO> nodes;
+    private List<CommonDiagramDTO.DetailedLinkDTO> links;
+    private CommonDiagramDTO.ExtendedMetadataDTO metadata;
 }
