@@ -2,8 +2,8 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
-import com.project.diagram_service.dto.common.CommonDiagramDTO;
-import com.project.diagram_service.dto.common.CommonSolutionReviewDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO;
+import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;

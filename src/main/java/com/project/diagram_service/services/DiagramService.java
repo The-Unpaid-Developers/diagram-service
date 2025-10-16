@@ -6,7 +6,7 @@ import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
-import com.project.diagram_service.dto.common.CommonDiagramDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;

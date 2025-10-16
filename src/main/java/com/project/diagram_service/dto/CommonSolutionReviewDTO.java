@@ -1,4 +1,4 @@
-package com.project.diagram_service.dto.common;
+package com.project.diagram_service.dto;
 
 import lombok.Data;
 import java.time.LocalDateTime;

@@ -1,6 +1,6 @@
 package com.project.diagram_service.dto;
 
-import com.project.diagram_service.dto.common.CommonDiagramDTO;
+import com.project.diagram_service.dto.CommonDiagramDTO;
 import lombok.Data;
 import java.util.List;
 

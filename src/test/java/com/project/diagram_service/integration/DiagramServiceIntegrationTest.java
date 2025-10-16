@@ -7,7 +7,7 @@ import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
-import com.project.diagram_service.dto.common.CommonSolutionReviewDTO;
+import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
