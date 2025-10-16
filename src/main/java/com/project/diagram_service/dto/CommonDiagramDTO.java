@@ -12,6 +12,13 @@ import java.util.List;
 public class CommonDiagramDTO {
 
     /**
+     * Private constructor to hide the implicit public one.
+     */
+    private CommonDiagramDTO() {
+        throw new IllegalStateException("Utility class");
+    }
+
+    /**
      * Standard node representation for diagrams
      */
     @Data

@@ -63,10 +63,13 @@ class CoreServiceClientTest {
         List<SystemDependencyDTO> result = coreServiceClient.getSystemDependencies();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).getSystemCode()).isEqualTo("SYS-001");
-        assertThat(result.get(1).getSystemCode()).isEqualTo("SYS-002");
+        assertThat(result)
+            .isNotNull()
+            .hasSize(2)
+            .satisfies(systems -> {
+                assertThat(systems.get(0).getSystemCode()).isEqualTo("SYS-001");
+                assertThat(systems.get(1).getSystemCode()).isEqualTo("SYS-002");
+            });
         mockServer.verify();
     }
 
@@ -113,10 +116,13 @@ class CoreServiceClientTest {
         List<BusinessCapabilityDiagramDTO> result = coreServiceClient.getBusinessCapabilities();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).getSystemCode()).isEqualTo("sys-001");
-        assertThat(result.get(1).getSystemCode()).isEqualTo("sys-002");
+        assertThat(result)
+            .isNotNull()
+            .hasSize(2)
+            .satisfies(capabilities -> {
+                assertThat(capabilities.get(0).getSystemCode()).isEqualTo("sys-001");
+                assertThat(capabilities.get(1).getSystemCode()).isEqualTo("sys-002");
+            });
         mockServer.verify();
     }
 
@@ -148,8 +154,9 @@ class CoreServiceClientTest {
         List<BusinessCapabilityDiagramDTO> result = coreServiceClient.getBusinessCapabilities();
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).isEmpty();
+        assertThat(result)
+            .isNotNull()
+            .isEmpty();
         mockServer.verify();
     }
 

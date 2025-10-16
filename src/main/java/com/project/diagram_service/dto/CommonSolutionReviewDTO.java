@@ -9,6 +9,12 @@ import java.util.List;
  * These classes represent the standard structure of solution reviews in the core service.
  */
 public class CommonSolutionReviewDTO {
+    /**
+     * Private constructor to hide the implicit public one.
+     */
+    private CommonSolutionReviewDTO() {
+        throw new IllegalStateException("Utility class");
+    }
 
     @Data
     public static class SolutionOverview {

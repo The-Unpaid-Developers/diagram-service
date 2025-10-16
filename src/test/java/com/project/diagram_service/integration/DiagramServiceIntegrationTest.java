@@ -520,6 +520,6 @@ class DiagramServiceIntegrationTest {
                 "System " + i,
                 "REV-" + String.format("%03d", i)
             ))
-            .collect(java.util.stream.Collectors.toList());
+            .toList();
     }
 }

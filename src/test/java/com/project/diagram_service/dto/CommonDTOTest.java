@@ -14,22 +14,6 @@ import static org.assertj.core.api.Assertions.*;
 @DisplayName("Common DTO Tests")
 class CommonDTOTest {
 
-    @Test
-    @DisplayName("CommonSolutionReviewDTO parent class should be instantiable")
-    void testCommonSolutionReviewDTOInstantiation() {
-        // Test that the parent class can be instantiated
-        CommonSolutionReviewDTO dto = new CommonSolutionReviewDTO();
-        assertThat(dto).isNotNull();
-    }
-
-    @Test
-    @DisplayName("CommonDiagramDTO parent class should be instantiable")
-    void testCommonDiagramDTOInstantiation() {
-        // Test that the parent class can be instantiated
-        CommonDiagramDTO dto = new CommonDiagramDTO();
-        assertThat(dto).isNotNull();
-    }
-
     @Nested
     @DisplayName("CommonSolutionReviewDTO Tests")
     class CommonSolutionReviewDTOTest {
