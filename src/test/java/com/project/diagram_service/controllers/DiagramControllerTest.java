@@ -2,6 +2,7 @@ package com.project.diagram_service.controllers;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
 import com.project.diagram_service.dto.CommonDiagramDTO;
 import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
@@ -41,6 +42,7 @@ class DiagramControllerTest {
 
     private List<SystemDependencyDTO> mockSystemDependencies;
     private List<BusinessCapabilityDiagramDTO> mockBusinessCapabilities;
+    private BusinessCapabilitiesTreeDTO mockBusinessCapabilitiesTree;
     private SpecificSystemDependenciesDiagramDTO mockSystemDiagram;
     private PathDiagramDTO mockPathDiagram;
 
@@ -76,6 +78,43 @@ class DiagramControllerTest {
         capability2.setSystemCode("sys-003");
         
         mockBusinessCapabilities = Arrays.asList(capability1, capability2);
+
+        // Setup mock business capabilities tree
+        mockBusinessCapabilitiesTree = new BusinessCapabilitiesTreeDTO();
+        
+        // Create L1 capability node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l1Node.setId("Customer Management");
+        l1Node.setName("Customer Management");
+        l1Node.setLevel("L1");
+        l1Node.setParentId(null);
+        l1Node.setSystemCount(1);
+        
+        // Create L2 capability node  
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l2Node.setId("CRM");
+        l2Node.setName("CRM");
+        l2Node.setLevel("L2");
+        l2Node.setParentId("Customer Management");
+        l2Node.setSystemCount(1);
+        
+        // Create L3 capability node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l3Node.setId("Contact Management");
+        l3Node.setName("Contact Management");
+        l3Node.setLevel("L3");
+        l3Node.setParentId("CRM");
+        l3Node.setSystemCount(1);
+        
+        // Create system node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        systemNode.setId("sys-001");
+        systemNode.setName("CRM System");
+        systemNode.setLevel("SYSTEM");
+        systemNode.setParentId("Contact Management");
+        systemNode.setSystemCount(0);
+        
+        mockBusinessCapabilitiesTree.setCapabilities(Arrays.asList(l1Node, l2Node, l3Node, systemNode));
 
         // Setup mock diagram
         mockSystemDiagram = new SpecificSystemDependenciesDiagramDTO();
@@ -209,6 +248,62 @@ class DiagramControllerTest {
                 .andExpect(status().isInternalServerError());
 
         verify(diagramService, times(1)).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should successfully get business capabilities tree")
+    void testGetAllBusinessCapabilitiesTree_Success() throws Exception {
+        // Given
+        when(diagramService.getBusinessCapabilitiesTree()).thenReturn(mockBusinessCapabilitiesTree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.capabilities").isArray())
+                .andExpect(jsonPath("$.capabilities.length()").value(4))
+                .andExpect(jsonPath("$.capabilities[0].id").value("Customer Management"))
+                .andExpect(jsonPath("$.capabilities[0].level").value("L1"))
+                .andExpect(jsonPath("$.capabilities[0].systemCount").value(1))
+                .andExpect(jsonPath("$.capabilities[3].id").value("sys-001"))
+                .andExpect(jsonPath("$.capabilities[3].level").value("SYSTEM"))
+                .andExpect(jsonPath("$.capabilities[3].name").value("CRM System"));
+
+        verify(diagramService, times(1)).getBusinessCapabilitiesTree();
+    }
+
+    @Test
+    @DisplayName("Should handle service exception when getting business capabilities tree")
+    void testGetAllBusinessCapabilitiesTree_ServiceException() throws Exception {
+        // Given
+        when(diagramService.getBusinessCapabilitiesTree()).thenThrow(new RuntimeException("Core service unavailable"));
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService, times(1)).getBusinessCapabilitiesTree();
+    }
+
+    @Test
+    @DisplayName("Should handle empty business capabilities tree")
+    void testGetAllBusinessCapabilitiesTree_EmptyTree() throws Exception {
+        // Given
+        BusinessCapabilitiesTreeDTO emptyTree = new BusinessCapabilitiesTreeDTO();
+        emptyTree.setCapabilities(Collections.emptyList());
+        when(diagramService.getBusinessCapabilitiesTree()).thenReturn(emptyTree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/all")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.capabilities").isArray())
+                .andExpect(jsonPath("$.capabilities.length()").value(0));
+
+        verify(diagramService, times(1)).getBusinessCapabilitiesTree();
     }
 
     @Test

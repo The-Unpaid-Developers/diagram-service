@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
@@ -521,5 +522,138 @@ class DiagramServiceIntegrationTest {
                 "REV-" + String.format("%03d", i)
             ))
             .toList();
+    }
+
+    // ========================================
+    // Business Capabilities Tree Integration Tests
+    // ========================================
+
+    @Nested
+    @DisplayName("Business Capabilities Tree Integration Tests")
+    class BusinessCapabilitiesTreeIntegrationTests {
+
+        @Test
+        @DisplayName("GET /business-capabilities/all should return tree structure")
+        void testBusinessCapabilitiesTreeEndpoint() throws Exception {
+            // Given
+            List<BusinessCapabilityDiagramDTO> mockData = createBusinessCapabilityTestData();
+            when(coreServiceClient.getBusinessCapabilities()).thenReturn(mockData);
+
+            // When
+            ResponseEntity<BusinessCapabilitiesTreeDTO> response = restTemplate.exchange(
+                baseUrl + "/business-capabilities/all",
+                HttpMethod.GET,
+                null,
+                BusinessCapabilitiesTreeDTO.class
+            );
+
+            // Then
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody()).isNotNull();
+            
+            BusinessCapabilitiesTreeDTO tree = response.getBody();
+            assertThat(tree.getCapabilities()).isNotNull().hasSize(4); // L1, L2, L3, System
+            
+            // Verify structure
+            assertThat(tree.getCapabilities())
+                .extracting("level")
+                .containsExactlyInAnyOrder("L1", "L2", "L3", "System");
+
+            verify(coreServiceClient).getBusinessCapabilities();
+        }
+
+        @Test
+        @DisplayName("GET /business-capabilities/all should handle service errors gracefully")
+        void testBusinessCapabilitiesTreeEndpoint_ServiceError() throws Exception {
+            // Given
+            when(coreServiceClient.getBusinessCapabilities())
+                .thenThrow(new RuntimeException("Service unavailable"));
+
+            // When
+            ResponseEntity<String> response = restTemplate.exchange(
+                baseUrl + "/business-capabilities/all",
+                HttpMethod.GET,
+                null,
+                String.class
+            );
+
+            // Then
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+            verify(coreServiceClient).getBusinessCapabilities();
+        }
+
+        @Test
+        @DisplayName("GET /business-capabilities/all should handle empty data")
+        void testBusinessCapabilitiesTreeEndpoint_EmptyData() throws Exception {
+            // Given
+            when(coreServiceClient.getBusinessCapabilities()).thenReturn(Collections.emptyList());
+
+            // When
+            ResponseEntity<BusinessCapabilitiesTreeDTO> response = restTemplate.exchange(
+                baseUrl + "/business-capabilities/all",
+                HttpMethod.GET,
+                null,
+                BusinessCapabilitiesTreeDTO.class
+            );
+
+            // Then
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody()).isNotNull();
+            assertThat(response.getBody().getCapabilities()).isEmpty();
+            
+            verify(coreServiceClient).getBusinessCapabilities();
+        }
+
+        @Test
+        @DisplayName("Business capabilities tree endpoint should validate JSON structure")
+        void testBusinessCapabilitiesTreeEndpoint_JsonStructure() throws Exception {
+            // Given
+            List<BusinessCapabilityDiagramDTO> mockData = createBusinessCapabilityTestData();
+            when(coreServiceClient.getBusinessCapabilities()).thenReturn(mockData);
+
+            // When
+            ResponseEntity<String> response = restTemplate.exchange(
+                baseUrl + "/business-capabilities/all",
+                HttpMethod.GET,
+                null,
+                String.class
+            );
+
+            // Then
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(response.getHeaders().getContentType().toString())
+                .contains("application/json");
+
+            // Validate JSON structure
+            String json = response.getBody();
+            assertThat(json).contains("\"capabilities\":");
+            assertThat(json).contains("\"level\":\"L1\"");
+            assertThat(json).contains("\"level\":\"System\"");
+            assertThat(json).contains("\"systemCount\":");
+            assertThat(json).contains("\"parentId\":");
+
+            verify(coreServiceClient).getBusinessCapabilities();
+        }
+    }
+
+    private List<BusinessCapabilityDiagramDTO> createBusinessCapabilityTestData() {
+        BusinessCapabilityDiagramDTO capability = new BusinessCapabilityDiagramDTO();
+        capability.setSystemCode("sys-001");
+
+        // Create solution overview
+        CommonSolutionReviewDTO.SolutionOverview solutionOverview = new CommonSolutionReviewDTO.SolutionOverview();
+        CommonSolutionReviewDTO.SolutionDetails solutionDetails = new CommonSolutionReviewDTO.SolutionDetails();
+        solutionDetails.setSolutionName("CRM System");
+        solutionOverview.setSolutionDetails(solutionDetails);
+        capability.setSolutionOverview(solutionOverview);
+
+        // Create business capability
+        BusinessCapabilityDiagramDTO.BusinessCapability businessCap = new BusinessCapabilityDiagramDTO.BusinessCapability();
+        businessCap.setL1Capability("Customer Management");
+        businessCap.setL2Capability("CRM");
+        businessCap.setL3Capability("Contact Management");
+        capability.setBusinessCapabilities(Arrays.asList(businessCap));
+
+        return Arrays.asList(capability);
     }
 }
