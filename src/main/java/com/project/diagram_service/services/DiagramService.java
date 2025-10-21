@@ -35,6 +35,10 @@ public class DiagramService {
     private static final String MAJOR_CRITICALITY = "Major";
     private static final String STANDARD_CRITICALITY = "Standard-2";
 
+    // Business Capability Levels
+    private static final String SYSTEM_LEVEL = "System";
+    private static final String ROOT_LEVEL = "Root";
+
     // System Roles
     private static final String PRODUCER_ROLE = "PRODUCER";
     private static final String CONSUMER_ROLE = "CONSUMER";
@@ -279,7 +283,7 @@ public class DiagramService {
         
         // Set system counts based on child counts
         for (BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node : nodes) {
-            if (!"System".equals(node.getLevel())) {
+            if (!SYSTEM_LEVEL.equals(node.getLevel())) {
                 node.setSystemCount(childCounts.getOrDefault(node.getId(), 0L).intValue());
             }
         }
@@ -366,7 +370,7 @@ public class DiagramService {
         
         // Set system counts based on child counts for all levels
         for (BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node : nodes) {
-            if ("System".equals(node.getLevel())) {
+            if (SYSTEM_LEVEL.equals(node.getLevel())) {
                 // System nodes count their L1 children
                 node.setSystemCount(childCounts.getOrDefault(node.getId(), 0L).intValue());
             } else {
@@ -419,7 +423,7 @@ public class DiagramService {
         // Don't set ID here - it will be set by the caller with proper flow-specific ID
         systemNode.setSystemCode(capability.getSystemCode());
         systemNode.setName(extractSolutionName(capability));
-        systemNode.setLevel(isRootLevel ? "Root" : "System");
+        systemNode.setLevel(isRootLevel ? ROOT_LEVEL : SYSTEM_LEVEL);
         systemNode.setParentId(parentId);
         systemNode.setSystemCount(null); // Not applicable for systems
         return systemNode;
