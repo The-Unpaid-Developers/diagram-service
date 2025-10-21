@@ -7,8 +7,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -50,25 +57,65 @@ class DiagramServiceApplicationTest {
     class MainMethodTest {
 
         @Test
-        @DisplayName("Main method should start application without errors")
+        @DisplayName("Main method should start application successfully")
         void testMainMethod() {
-            // Test that main method can be called without throwing exceptions
-            // Note: We don't actually run the full application to avoid port conflicts
-            assertThatCode(() -> {
-                // DiagramServiceApplication.main(new String[]{}); // Commented out to avoid port conflicts in tests
-            }).doesNotThrowAnyException();
+            // Given
+            String[] args = {};
+            
+            // When & Then - Test that main method executes without throwing exceptions
+            try (MockedStatic<SpringApplication> springAppMock = Mockito.mockStatic(SpringApplication.class)) {
+                ConfigurableApplicationContext mockContext = mock(ConfigurableApplicationContext.class);
+                springAppMock.when(() -> SpringApplication.run(eq(DiagramServiceApplication.class), eq(args)))
+                           .thenReturn(mockContext);
+                
+                // Execute main method
+                assertThatCode(() -> DiagramServiceApplication.main(args))
+                    .doesNotThrowAnyException();
+                
+                // Verify SpringApplication.run was called with correct parameters
+                springAppMock.verify(() -> SpringApplication.run(DiagramServiceApplication.class, args));
+            }
         }
 
         @Test
-        @DisplayName("Application should handle empty command line arguments")
-        void shouldHandleEmptyCommandLineArguments() {
-            // Verify application can handle null or empty arguments
-            assertThatCode(() -> {
-                // Verify the application class exists and is properly configured
-                Class<?> appClass = DiagramServiceApplication.class;
-                assertThat(appClass).isNotNull();
-                assertThat(appClass.getSimpleName()).isEqualTo("DiagramServiceApplication");
-            }).doesNotThrowAnyException();
+        @DisplayName("Main method should handle various arguments")
+        void shouldHandleVariousArguments() {
+            // Given
+            String[] args = {"--server.port=8082", "--spring.profiles.active=test"};
+            
+            // When & Then - Test with specific arguments
+            try (MockedStatic<SpringApplication> springAppMock = Mockito.mockStatic(SpringApplication.class)) {
+                ConfigurableApplicationContext mockContext = mock(ConfigurableApplicationContext.class);
+                springAppMock.when(() -> SpringApplication.run(eq(DiagramServiceApplication.class), eq(args)))
+                           .thenReturn(mockContext);
+                
+                // Execute main method
+                assertThatCode(() -> DiagramServiceApplication.main(args))
+                    .doesNotThrowAnyException();
+                
+                // Verify SpringApplication.run was called with the specific args
+                springAppMock.verify(() -> SpringApplication.run(DiagramServiceApplication.class, args));
+            }
+        }
+
+        @Test
+        @DisplayName("Main method should call SpringApplication.run with correct class")
+        void shouldCallSpringApplicationRunWithCorrectClass() {
+            // Given
+            String[] args = {};
+            
+            // When & Then - Verify the correct application class is used
+            try (MockedStatic<SpringApplication> springAppMock = Mockito.mockStatic(SpringApplication.class)) {
+                ConfigurableApplicationContext mockContext = mock(ConfigurableApplicationContext.class);
+                springAppMock.when(() -> SpringApplication.run(any(Class.class), any(String[].class)))
+                           .thenReturn(mockContext);
+                
+                // Execute main method
+                DiagramServiceApplication.main(args);
+                
+                // Verify SpringApplication.run was called with DiagramServiceApplication.class
+                springAppMock.verify(() -> SpringApplication.run(DiagramServiceApplication.class, args));
+            }
         }
     }
 
