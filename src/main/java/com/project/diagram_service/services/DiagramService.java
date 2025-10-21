@@ -55,6 +55,9 @@ public class DiagramService {
     private static final String SINGLE_PATH_FORMAT = "%d path found";
     private static final String MULTIPLE_PATHS_FORMAT = "%d paths found";
 
+    // ID Separator Constants
+    private static final String UNDER_SEPARATOR = "-under-";
+
     private final CoreServiceClient coreServiceClient;
 
     public DiagramService(CoreServiceClient coreServiceClient) {
@@ -167,7 +170,7 @@ public class DiagramService {
         }
 
         // Create L2 node with L1 as parent (include parent in ID for uniqueness)
-        String l2Id = generateCapabilityId(l2, "L2") + "-under-" + l1Id;
+        String l2Id = generateCapabilityId(l2, "L2") + UNDER_SEPARATOR + l1Id;
         if (!uniqueNodes.containsKey(l2Id)) {
             BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = createCapabilityNode(l2, "L2", l1Id, 0);
             l2Node.setId(l2Id);
@@ -175,7 +178,7 @@ public class DiagramService {
         }
 
         // Create L3 node with L2 as parent (include parent in ID for uniqueness)
-        String l3Id = generateCapabilityId(l3, "L3") + "-under-" + l2Id;
+        String l3Id = generateCapabilityId(l3, "L3") + UNDER_SEPARATOR + l2Id;
         if (!uniqueNodes.containsKey(l3Id)) {
             BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = createCapabilityNode(l3, "L3", l2Id, 0);
             l3Node.setId(l3Id);
@@ -184,7 +187,7 @@ public class DiagramService {
 
         // Create system node for this specific capability flow
         // System appears as separate leaf node for each business capability flow
-        String systemId = system.getSystemCode() + "-under-" + l3Id;
+        String systemId = system.getSystemCode() + UNDER_SEPARATOR + l3Id;
         if (!uniqueNodes.containsKey(systemId)) {
             BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = createSystemNode(system, l3Id);
             systemNode.setId(systemId); // Override ID to make it unique per flow

@@ -534,7 +534,7 @@ class DiagramServiceIntegrationTest {
 
         @Test
         @DisplayName("GET /business-capabilities/all should return tree structure")
-        void testBusinessCapabilitiesTreeEndpoint() throws Exception {
+        void testBusinessCapabilitiesTreeEndpoint() {
             // Given
             List<BusinessCapabilityDiagramDTO> mockData = createBusinessCapabilityTestData();
             when(coreServiceClient.getBusinessCapabilities()).thenReturn(mockData);
@@ -564,7 +564,7 @@ class DiagramServiceIntegrationTest {
 
         @Test
         @DisplayName("GET /business-capabilities/all should handle service errors gracefully")
-        void testBusinessCapabilitiesTreeEndpoint_ServiceError() throws Exception {
+        void testBusinessCapabilitiesTreeEndpoint_ServiceError() {
             // Given
             when(coreServiceClient.getBusinessCapabilities())
                 .thenThrow(new RuntimeException("Service unavailable"));
@@ -584,7 +584,7 @@ class DiagramServiceIntegrationTest {
 
         @Test
         @DisplayName("GET /business-capabilities/all should handle empty data")
-        void testBusinessCapabilitiesTreeEndpoint_EmptyData() throws Exception {
+        void testBusinessCapabilitiesTreeEndpoint_EmptyData() {
             // Given
             when(coreServiceClient.getBusinessCapabilities()).thenReturn(Collections.emptyList());
 
@@ -606,7 +606,7 @@ class DiagramServiceIntegrationTest {
 
         @Test
         @DisplayName("Business capabilities tree endpoint should validate JSON structure")
-        void testBusinessCapabilitiesTreeEndpoint_JsonStructure() throws Exception {
+        void testBusinessCapabilitiesTreeEndpoint_JsonStructure() {
             // Given
             List<BusinessCapabilityDiagramDTO> mockData = createBusinessCapabilityTestData();
             when(coreServiceClient.getBusinessCapabilities()).thenReturn(mockData);
@@ -626,11 +626,12 @@ class DiagramServiceIntegrationTest {
 
             // Validate JSON structure
             String json = response.getBody();
-            assertThat(json).contains("\"capabilities\":");
-            assertThat(json).contains("\"level\":\"L1\"");
-            assertThat(json).contains("\"level\":\"System\"");
-            assertThat(json).contains("\"systemCount\":");
-            assertThat(json).contains("\"parentId\":");
+            assertThat(json)
+                .contains("\"capabilities\":")
+                .contains("\"level\":\"L1\"")
+                .contains("\"level\":\"System\"")
+                .contains("\"systemCount\":")
+                .contains("\"parentId\":");
 
             verify(coreServiceClient).getBusinessCapabilities();
         }
