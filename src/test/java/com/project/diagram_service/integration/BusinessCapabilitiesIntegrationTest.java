@@ -162,7 +162,7 @@ class BusinessCapabilitiesIntegrationTest {
             // Verify hierarchy structure
             List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = tree.getCapabilities().stream()
                 .filter(n -> "L1".equals(n.getLevel()))
-                .collect(Collectors.toList());
+                .toList();
             
             assertThat(l1Nodes).hasSizeGreaterThanOrEqualTo(2);
             assertThat(l1Nodes)
@@ -211,7 +211,7 @@ class BusinessCapabilitiesIntegrationTest {
             // System should appear twice (once under each L3)
             List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = tree.getCapabilities().stream()
                 .filter(n -> "System".equals(n.getLevel()))
-                .collect(Collectors.toList());
+                .toList();
             
             assertThat(systemNodes).hasSize(2);
             assertThat(systemNodes)

@@ -1801,7 +1801,7 @@ class DiagramServiceTest {
         // Both systems should have same parent (both under same L3 flow)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systems = result.getCapabilities().stream()
             .filter(n -> "System".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         
         assertThat(systems)
             .hasSize(2)
@@ -1838,7 +1838,7 @@ class DiagramServiceTest {
         // Both L3s should have same parent (L2)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
             .filter(n -> "L3".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         
         assertThat(l3Nodes)
             .hasSize(2)
@@ -1877,7 +1877,7 @@ class DiagramServiceTest {
         // Both L2s should have same parent (L1)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l2Nodes = result.getCapabilities().stream()
             .filter(n -> "L2".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         
         assertThat(l2Nodes)
             .hasSize(2)
@@ -1918,7 +1918,7 @@ class DiagramServiceTest {
         // Should have 2 L1s: Customer Management + Sales
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
             .filter(n -> "L1".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(l1Nodes).hasSize(2);
         assertThat(l1Nodes)
             .extracting("name")
@@ -1927,13 +1927,13 @@ class DiagramServiceTest {
         // Should have 2 separate CRM L2 nodes (one under each L1)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l2Nodes = result.getCapabilities().stream()
             .filter(n -> "L2".equals(n.getLevel()) && "CRM".equals(n.getName()))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(l2Nodes).hasSize(2); // CRM appears under both Customer Management and Sales
 
         // Should have 3 L3 nodes (Contact Management, Lead Management, Opportunity Management)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
             .filter(n -> "L3".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(l3Nodes).hasSize(3);
         assertThat(l3Nodes)
             .extracting("name")
@@ -1942,7 +1942,7 @@ class DiagramServiceTest {
         // CRITICAL: Should have 3 separate system leaf nodes (one for each capability flow)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
             .filter(n -> "System".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(systemNodes).hasSize(3); // System appears 3 times as separate leaf nodes
         
         // All system nodes should have the same name but different IDs (flow-specific)
@@ -1975,7 +1975,7 @@ class DiagramServiceTest {
         // Then - Should create separate Analytics L2 nodes under different L1 parents
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> analyticsL2Nodes = result.getCapabilities().stream()
             .filter(n -> "L2".equals(n.getLevel()) && "Analytics".equals(n.getName()))
-            .collect(Collectors.toList());
+            .toList();
         
         assertThat(analyticsL2Nodes).hasSize(2); // Two separate Analytics L2 nodes
         
@@ -1988,7 +1988,7 @@ class DiagramServiceTest {
         // Should have 2 different L3 nodes under the different Analytics L2s
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
             .filter(n -> "L3".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         assertThat(l3Nodes).hasSize(2);
         assertThat(l3Nodes)
             .extracting("name")
@@ -2198,7 +2198,7 @@ class DiagramServiceTest {
         // Verify we have 2 distinct L1s
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
             .filter(n -> "L1".equals(n.getLevel()))
-            .collect(Collectors.toList());
+            .toList();
         
         assertThat(l1Nodes).hasSize(2);
         assertThat(l1Nodes)

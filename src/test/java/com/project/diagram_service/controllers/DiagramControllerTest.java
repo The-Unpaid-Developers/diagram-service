@@ -630,6 +630,24 @@ class DiagramControllerTest {
 
         verify(diagramService).findAllPathsDiagram("NONEXISTENT", "SYS-002");
     }
+    
+    @Test
+    @DisplayName("Should return internal server error when service throws unexpected exception")
+    void testGetPathsBetweenSystems_ServiceException() throws Exception {
+        // Arrange
+        when(diagramService.findAllPathsDiagram("SYS-001", "SYS-002"))
+                .thenThrow(new RuntimeException("Database connection failed"));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/v1/diagram/system-dependencies/path")
+                        .param("start", "SYS-001")
+                        .param("end", "SYS-002")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService).findAllPathsDiagram("SYS-001", "SYS-002");
+    }
 
     // Tests for getAllSystemDependenciesDiagrams endpoint
     @Test

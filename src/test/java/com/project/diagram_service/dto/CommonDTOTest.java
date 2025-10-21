@@ -116,6 +116,22 @@ class CommonDTOTest {
             assertThat(concern.getComments()).isEqualTo("Fixed in latest version");
             assertThat(concern.getFollowUpDate()).isEqualTo(followUpDate);
         }
+
+        @Test
+        @DisplayName("CommonSolutionReviewDTO constructor should throw IllegalStateException")
+        void testUtilityClassConstructor() {
+            // When & Then
+            assertThatThrownBy(() -> {
+                // Using reflection to access private constructor
+                var constructor = CommonSolutionReviewDTO.class.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                constructor.newInstance();
+            })
+            .isInstanceOf(java.lang.reflect.InvocationTargetException.class)
+            .hasCauseInstanceOf(IllegalStateException.class)
+            .cause()
+            .hasMessage("Utility class");
+        }
     }
 
     @Nested
@@ -216,6 +232,22 @@ class CommonDTOTest {
             assertThat(metadata.getReview()).isEqualTo("Comprehensive review");
             assertThat(metadata.getIntegrationMiddleware()).isEqualTo(middleware);
             assertThat(metadata.getGeneratedDate()).isEqualTo(date);
+        }
+
+        @Test
+        @DisplayName("CommonDiagramDTO constructor should throw IllegalStateException")
+        void testUtilityClassConstructor() {
+            // When & Then
+            assertThatThrownBy(() -> {
+                // Using reflection to access private constructor
+                var constructor = CommonDiagramDTO.class.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                constructor.newInstance();
+            })
+            .isInstanceOf(java.lang.reflect.InvocationTargetException.class)
+            .hasCauseInstanceOf(IllegalStateException.class)
+            .cause()
+            .hasMessage("Utility class");
         }
     }
 }

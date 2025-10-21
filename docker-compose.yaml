@@ -1,8 +1,9 @@
 services:
   diagram-service:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    image: smithquaz/fyp-diagram-service:latest
+    # build: 
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: diagram_service
     environment:
       - CORE_SERVICE_URL=${CORE_SERVICE_URL:-http://host.docker.internal:8080}
