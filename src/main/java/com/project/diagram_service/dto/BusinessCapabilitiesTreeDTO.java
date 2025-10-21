@@ -15,12 +15,15 @@ public class BusinessCapabilitiesTreeDTO {
     /**
      * Represents a node in the business capabilities tree.
      * Can be either a capability level (L1, L2, L3) or a system.
-     * For systems: id = systemCode, name = solutionName
-     * For capabilities: id = capability name, name = capability name
+     * id = unique identifier for the node showing parents
+     * systemCode = only for system nodes, null for capability levels
+     * For systems: name = solutionName
+     * For capabilities: name = capability name
      */
     @Data
     public static class BusinessCapabilityNode {
         private String id;
+        private String systemCode; // Only for system nodes, null for capability levels
         private String name;
         private String level; // "L1", "L2", "L3", or "System"
         private String parentId;
