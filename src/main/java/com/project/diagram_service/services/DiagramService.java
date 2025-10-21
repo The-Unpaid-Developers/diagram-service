@@ -144,6 +144,72 @@ public class DiagramService {
     }
 
     /**
+     * Generates a business capabilities tree filtered by a specific system code.
+     * Returns only the hierarchy path from L1 → L2 → L3 → System for the given system.
+     * 
+     * @param systemCode The specific system code to filter capabilities for
+     * @return BusinessCapabilitiesTreeDTO containing the filtered capabilities tree
+     * @throws IllegalArgumentException if systemCode is null or empty
+     * @throws IllegalStateException if there's an error generating the filtered tree
+     */
+    public BusinessCapabilitiesTreeDTO getSystemBusinessCapabilitiesTree(String systemCode) {
+        log.info("Generating business capabilities tree for system: {}", systemCode);
+        
+        if (systemCode == null || systemCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("System code cannot be null or empty");
+        }
+        
+        try {
+            // Get existing business capabilities from core service
+            List<BusinessCapabilityDiagramDTO> capabilities = coreServiceClient.getBusinessCapabilities();
+            
+            // Filter capabilities for the specific system
+            List<BusinessCapabilityDiagramDTO> systemCapabilities = capabilities.stream()
+                    .filter(capability -> systemCode.equals(capability.getSystemCode()))
+                    .toList();
+            
+            if (systemCapabilities.isEmpty()) {
+                log.warn("No business capabilities found for system: {}", systemCode);
+                BusinessCapabilitiesTreeDTO emptyTree = new BusinessCapabilitiesTreeDTO();
+                emptyTree.setCapabilities(new ArrayList<>());
+                return emptyTree;
+            }
+            
+            log.debug("Found {} capabilities for system: {}", systemCapabilities.size(), systemCode);
+            
+            BusinessCapabilitiesTreeDTO tree = new BusinessCapabilitiesTreeDTO();
+            List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodes = new ArrayList<>();
+
+            // Track unique nodes to avoid duplicates (using full path as key)
+            Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> uniqueNodes = new HashMap<>();
+            
+            // Process each system and each of its business capability flows
+            for (BusinessCapabilityDiagramDTO system : systemCapabilities) {
+                if (system.getBusinessCapabilities() != null) {
+                    for (BusinessCapabilityDiagramDTO.BusinessCapability bizCap : system.getBusinessCapabilities()) {
+                        // Each business capability represents one complete flow: L1 -> L2 -> L3 -> System
+                        processCapabilityFlow(system, bizCap, uniqueNodes);
+                    }
+                }
+            }
+            
+            // Convert unique nodes map to list and calculate system counts
+            nodes.addAll(uniqueNodes.values());
+            calculateSystemCounts(nodes);
+
+            tree.setCapabilities(nodes);
+            log.info("Generated business capabilities tree for system: {} with {} nodes from {} capability flows", 
+                     systemCode, nodes.size(), countTotalFlows(systemCapabilities));
+            
+            return tree;
+            
+        } catch (Exception e) {
+            log.error("Error generating business capabilities tree for system {}: {}", systemCode, e.getMessage());
+            throw new IllegalStateException("Failed to generate business capabilities tree for system: " + systemCode, e);
+        }
+    }
+
+    /**
      * Processes a single business capability flow from L1 -> L2 -> L3 -> System.
      * Creates nodes for each level if they don't already exist, ensuring proper parent-child relationships.
      */
@@ -372,9 +438,7 @@ public class DiagramService {
                 paths.size(), startSystem, endSystem, System.currentTimeMillis() - startTime);
 
         // Convert paths to diagram format with direct system-to-system links
-        PathDiagramDTO diagram = convertPathsToPathDiagram(paths, startSystem, endSystem, allDependencies);
-
-        return diagram;
+        return convertPathsToPathDiagram(paths, startSystem, endSystem, allDependencies);
     }
 
     /**
@@ -1333,49 +1397,152 @@ public class DiagramService {
         Map<String, Integer> linkIdentifiers = new HashMap<>();
         Set<String> nodeIdentifiers = new HashSet<>();
 
+        processSystemDependenciesForOverallDiagram(allDependencies, uniqueLinks, uniqueNodes, linkIdentifiers, nodeIdentifiers);
+        updateLinkCounts(uniqueLinks, linkIdentifiers);
+
+        return createOverallDiagram(uniqueLinks, uniqueNodes);
+    }
+
+    /**
+     * Processes all system dependencies to extract unique links and nodes.
+     */
+    private void processSystemDependenciesForOverallDiagram(List<SystemDependencyDTO> allDependencies,
+                                                           List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                                                           List<CommonDiagramDTO.NodeDTO> uniqueNodes,
+                                                           Map<String, Integer> linkIdentifiers,
+                                                           Set<String> nodeIdentifiers) {
         for (SystemDependencyDTO system : allDependencies) {
             if (system.getIntegrationFlows() != null) {
-                for (SystemDependencyDTO.IntegrationFlow flow : system.getIntegrationFlows()) {
-                    String linkId = system.getSystemCode() + "-" + flow.getCounterpartSystemCode();
-                    String reverseLinkId = flow.getCounterpartSystemCode() + "-" + system.getSystemCode();
-                    if (!(linkIdentifiers.containsKey(linkId) || linkIdentifiers.containsKey(reverseLinkId))) {
-                        linkIdentifiers.put(linkId, 1);
-                        CommonDiagramDTO.SimpleLinkDTO link = new CommonDiagramDTO.SimpleLinkDTO();
-                        link.setSource(system.getSystemCode());
-                        link.setTarget(flow.getCounterpartSystemCode());
-                        uniqueLinks.add(link);
-                    } else {
-                        if (linkIdentifiers.containsKey(linkId)) {
-                            linkIdentifiers.put(linkId, linkIdentifiers.get(linkId) + 1);
-                        } else {
-                            linkIdentifiers.put(reverseLinkId, linkIdentifiers.get(reverseLinkId) + 1);
-                        }
-                    }
-                    if (!nodeIdentifiers.contains(system.getSystemCode())) {
-                        nodeIdentifiers.add(system.getSystemCode());
-                        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
-                        node.setId(system.getSystemCode());
-                        node.setName(system.getSolutionOverview().getSolutionDetails().getSolutionName());
-                        node.setType(CORE_SYSTEM_TYPE);
-                        node.setCriticality(MAJOR_CRITICALITY);
-                        uniqueNodes.add(node);
-                    }
-                    if (!nodeIdentifiers.contains(flow.getCounterpartSystemCode())) {
-                        nodeIdentifiers.add(flow.getCounterpartSystemCode());
-                        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
-                        node.setId(flow.getCounterpartSystemCode());
-                        node.setName(flow.getCounterpartSystemCode());
-                        node.setType(EXTERNAL_SYSTEM_TYPE);
-                        node.setCriticality(STANDARD_CRITICALITY);
-                        uniqueNodes.add(node);
-                    }
-                }
+                processSystemFlowsForOverallDiagram(system, uniqueLinks, uniqueNodes, linkIdentifiers, nodeIdentifiers);
             }
         }
+    }
 
+    /**
+     * Processes integration flows for a single system in overall diagram context.
+     */
+    private void processSystemFlowsForOverallDiagram(SystemDependencyDTO system,
+                                                    List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                                                    List<CommonDiagramDTO.NodeDTO> uniqueNodes,
+                                                    Map<String, Integer> linkIdentifiers,
+                                                    Set<String> nodeIdentifiers) {
+        for (SystemDependencyDTO.IntegrationFlow flow : system.getIntegrationFlows()) {
+            processIntegrationFlow(system, flow, uniqueLinks, linkIdentifiers);
+            addSystemNodeIfNotExists(system, uniqueNodes, nodeIdentifiers);
+            addCounterpartNodeIfNotExists(flow, uniqueNodes, nodeIdentifiers);
+        }
+    }
+
+    /**
+     * Processes a single integration flow to handle link creation and counting.
+     */
+    private void processIntegrationFlow(SystemDependencyDTO system,
+                                      SystemDependencyDTO.IntegrationFlow flow,
+                                      List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                                      Map<String, Integer> linkIdentifiers) {
+        String linkId = system.getSystemCode() + "-" + flow.getCounterpartSystemCode();
+        String reverseLinkId = flow.getCounterpartSystemCode() + "-" + system.getSystemCode();
+
+        if (!linkExists(linkId, reverseLinkId, linkIdentifiers)) {
+            createNewLink(system, flow, uniqueLinks, linkIdentifiers, linkId);
+        } else {
+            incrementExistingLinkCount(linkId, reverseLinkId, linkIdentifiers);
+        }
+    }
+
+    /**
+     * Checks if a link already exists in either direction.
+     */
+    private boolean linkExists(String linkId, String reverseLinkId, Map<String, Integer> linkIdentifiers) {
+        return linkIdentifiers.containsKey(linkId) || linkIdentifiers.containsKey(reverseLinkId);
+    }
+
+    /**
+     * Creates a new link and adds it to the collection.
+     */
+    private void createNewLink(SystemDependencyDTO system,
+                             SystemDependencyDTO.IntegrationFlow flow,
+                             List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                             Map<String, Integer> linkIdentifiers,
+                             String linkId) {
+        linkIdentifiers.put(linkId, 1);
+        CommonDiagramDTO.SimpleLinkDTO link = new CommonDiagramDTO.SimpleLinkDTO();
+        link.setSource(system.getSystemCode());
+        link.setTarget(flow.getCounterpartSystemCode());
+        uniqueLinks.add(link);
+    }
+
+    /**
+     * Increments the count for an existing link.
+     */
+    private void incrementExistingLinkCount(String linkId, String reverseLinkId, Map<String, Integer> linkIdentifiers) {
+        if (linkIdentifiers.containsKey(linkId)) {
+            linkIdentifiers.put(linkId, linkIdentifiers.get(linkId) + 1);
+        } else {
+            linkIdentifiers.put(reverseLinkId, linkIdentifiers.get(reverseLinkId) + 1);
+        }
+    }
+
+    /**
+     * Adds a system node if it doesn't already exist.
+     */
+    private void addSystemNodeIfNotExists(SystemDependencyDTO system,
+                                        List<CommonDiagramDTO.NodeDTO> uniqueNodes,
+                                        Set<String> nodeIdentifiers) {
+        if (!nodeIdentifiers.contains(system.getSystemCode())) {
+            nodeIdentifiers.add(system.getSystemCode());
+            CommonDiagramDTO.NodeDTO node = createSystemNodeFromDependency(system);
+            uniqueNodes.add(node);
+        }
+    }
+
+    /**
+     * Adds a counterpart system node if it doesn't already exist.
+     */
+    private void addCounterpartNodeIfNotExists(SystemDependencyDTO.IntegrationFlow flow,
+                                             List<CommonDiagramDTO.NodeDTO> uniqueNodes,
+                                             Set<String> nodeIdentifiers) {
+        String counterpartCode = flow.getCounterpartSystemCode();
+        if (!nodeIdentifiers.contains(counterpartCode)) {
+            nodeIdentifiers.add(counterpartCode);
+            CommonDiagramDTO.NodeDTO node = createCounterpartNode(counterpartCode);
+            uniqueNodes.add(node);
+        }
+    }
+
+    /**
+     * Creates a system node from dependency data.
+     */
+    private CommonDiagramDTO.NodeDTO createSystemNodeFromDependency(SystemDependencyDTO system) {
+        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
+        node.setId(system.getSystemCode());
+        node.setName(system.getSolutionOverview().getSolutionDetails().getSolutionName());
+        node.setType(CORE_SYSTEM_TYPE);
+        node.setCriticality(MAJOR_CRITICALITY);
+        return node;
+    }
+
+    /**
+     * Creates a counterpart system node.
+     */
+    private CommonDiagramDTO.NodeDTO createCounterpartNode(String counterpartCode) {
+        CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
+        node.setId(counterpartCode);
+        node.setName(counterpartCode);
+        node.setType(EXTERNAL_SYSTEM_TYPE);
+        node.setCriticality(STANDARD_CRITICALITY);
+        return node;
+    }
+
+    /**
+     * Updates link counts based on the link identifiers map.
+     */
+    private void updateLinkCounts(List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                                Map<String, Integer> linkIdentifiers) {
         for (CommonDiagramDTO.SimpleLinkDTO link : uniqueLinks) {
             String linkId = link.getSource() + "-" + link.getTarget();
             String reverseLinkId = link.getTarget() + "-" + link.getSource();
+            
             if (linkIdentifiers.containsKey(linkId)) {
                 link.setCount(linkIdentifiers.get(linkId));
             } else if (linkIdentifiers.containsKey(reverseLinkId)) {
@@ -1384,7 +1551,13 @@ public class DiagramService {
                 link.setCount(1);
             }
         }
+    }
 
+    /**
+     * Creates the final overall diagram with links and nodes.
+     */
+    private OverallSystemDependenciesDiagramDTO createOverallDiagram(List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
+                                                                   List<CommonDiagramDTO.NodeDTO> uniqueNodes) {
         OverallSystemDependenciesDiagramDTO diagram = new OverallSystemDependenciesDiagramDTO();
         diagram.setLinks(uniqueLinks);
         diagram.setNodes(uniqueNodes);

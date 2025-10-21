@@ -203,11 +203,13 @@ class DiagramServiceTest {
         assertThat(externalProducerNode).isNotNull();
         
         // Verify links
-        List<CommonDiagramDTO.DetailedLinkDTO> links = result.getLinks();
-        assertThat(links).anyMatch(link -> 
-            "SYS-001".equals(link.getSource()) && "SYS-002-C".equals(link.getTarget()));
-        assertThat(links).anyMatch(link -> 
-            "SYS-002-P".equals(link.getSource()) && "SYS-001".equals(link.getTarget()));
+        assertThat(result.getLinks())
+            .extracting(CommonDiagramDTO.DetailedLinkDTO::getSource, 
+                        CommonDiagramDTO.DetailedLinkDTO::getTarget)
+            .containsExactlyInAnyOrder(
+                tuple("SYS-001", "SYS-002-C"),
+                tuple("SYS-002-P", "SYS-001")
+            );
     }
 
     @Test
@@ -1396,11 +1398,10 @@ class DiagramServiceTest {
         assertThat(result.getNodes()).hasSizeGreaterThanOrEqualTo(4); // At least 1 Core + 3 External minimum
         
         // Verify at least one core system exists
-        List<CommonDiagramDTO.NodeDTO> coreNodes = result.getNodes().stream()
-                .filter(n -> "Core System".equals(n.getType()))
-                .toList();
-        assertThat(coreNodes).hasSizeGreaterThanOrEqualTo(1);
-        assertThat(coreNodes).allMatch(n -> n.getName() != null && !n.getName().isEmpty());
+        assertThat(result.getNodes())
+            .filteredOn(n -> "Core System".equals(n.getType()))
+            .isNotEmpty()
+            .allSatisfy(n -> assertThat(n.getName()).isNotNull().isNotEmpty());
 
         // Verify external systems exist
         List<CommonDiagramDTO.NodeDTO> externalNodes = result.getNodes().stream()
@@ -2211,6 +2212,242 @@ class DiagramServiceTest {
             .findFirst()
             .orElseThrow();
         assertThat(customerL1.getSystemCount()).isGreaterThan(0);
+    }
+
+    // ========================================
+    // System-Specific Business Capabilities Unit Tests
+    // ========================================
+
+    @Test
+    @DisplayName("Should return filtered tree for specific system code")
+    void testGetSystemBusinessCapabilitiesTree_ValidSystemCode() {
+        // Given - Multiple systems with different capabilities
+        List<BusinessCapabilityDiagramDTO> rawData = Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "ERP System", "Finance", "Accounting", "Accounts Payable"),
+            createRawSystem("sys-003", "Marketing System", "Customer Management", "CRM", "Lead Management")
+        );
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // L1 + L2 + L3 + System
+
+        // Verify only sys-001 capabilities are included
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .toList();
+        
+        assertThat(systemNodes).hasSize(1);
+        assertThat(systemNodes.get(0).getName()).isEqualTo("CRM System");
+        assertThat(systemNodes.get(0).getId()).contains("sys-001");
+
+        // Verify the complete hierarchy for sys-001
+        Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodeMap = 
+            result.getCapabilities().stream()
+                .collect(Collectors.toMap(
+                    BusinessCapabilitiesTreeDTO.BusinessCapabilityNode::getId,
+                    node -> node
+                ));
+
+        // Verify L1 node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = nodeMap.values().stream()
+            .filter(n -> "L1".equals(n.getLevel()) && "Customer Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("L1 node not found"));
+        assertThat(l1Node.getParentId()).isNull();
+
+        // Verify L2 node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = nodeMap.values().stream()
+            .filter(n -> "L2".equals(n.getLevel()) && "CRM".equals(n.getName()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("L2 node not found"));
+        assertThat(l2Node.getParentId()).isEqualTo(l1Node.getId());
+
+        // Verify L3 node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = nodeMap.values().stream()
+            .filter(n -> "L3".equals(n.getLevel()) && "Contact Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("L3 node not found"));
+        assertThat(l3Node.getParentId()).isEqualTo(l2Node.getId());
+
+        // Verify System node
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = nodeMap.values().stream()
+            .filter(n -> "System".equals(n.getLevel()) && "CRM System".equals(n.getName()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("System node not found"));
+        assertThat(systemNode.getParentId()).isEqualTo(l3Node.getId());
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should return empty tree when system code not found")
+    void testGetSystemBusinessCapabilitiesTree_SystemNotFound() {
+        // Given - Systems with different codes
+        List<BusinessCapabilityDiagramDTO> rawData = Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management"),
+            createRawSystem("sys-002", "ERP System", "Finance", "Accounting", "Accounts Payable")
+        );
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("nonexistent-sys");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isNotNull();
+        assertThat(result.getCapabilities()).isEmpty();
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should throw IllegalArgumentException for null system code")
+    void testGetSystemBusinessCapabilitiesTree_NullSystemCode() {
+        // When & Then
+        assertThatThrownBy(() -> diagramService.getSystemBusinessCapabilitiesTree(null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("System code cannot be null or empty");
+
+        verifyNoInteractions(coreServiceClient);
+    }
+
+    @Test
+    @DisplayName("Should throw IllegalArgumentException for empty system code")
+    void testGetSystemBusinessCapabilitiesTree_EmptySystemCode() {
+        // When & Then
+        assertThatThrownBy(() -> diagramService.getSystemBusinessCapabilitiesTree(""))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("System code cannot be null or empty");
+
+        assertThatThrownBy(() -> diagramService.getSystemBusinessCapabilitiesTree("   "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("System code cannot be null or empty");
+
+        verifyNoInteractions(coreServiceClient);
+    }
+
+    @Test
+    @DisplayName("Should handle multiple business capabilities for same system")
+    void testGetSystemBusinessCapabilitiesTree_MultipleCapabilitiesSameSystem() {
+        // Given - System with multiple business capabilities
+        BusinessCapabilityDiagramDTO system = createRawSystem("sys-001", "Multi-Function System", 
+            "Customer Management", "CRM", "Contact Management");
+        
+        // Add additional capabilities to the same system
+        system.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Customer Management", "CRM", "Contact Management"),
+            createBusinessCapability("Customer Management", "CRM", "Lead Management"),
+            createBusinessCapability("Sales", "Pipeline", "Opportunity Management")
+        ));
+
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSizeGreaterThanOrEqualTo(6); // At least 2 L1s + 2 L2s + 2 L3s + 3 Systems
+
+        // Verify we have the expected L1 nodes
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .toList();
+        
+        assertThat(l1Nodes)
+            .extracting("name")
+            .containsExactlyInAnyOrder("Customer Management", "Sales");
+
+        // Verify system nodes exist (one for each capability flow)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .toList();
+        
+        assertThat(systemNodes).hasSize(3); // One system node per capability flow
+        assertThat(systemNodes)
+            .extracting("name")
+            .containsOnly("Multi-Function System"); // All should have same name
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle incomplete capability data gracefully")
+    void testGetSystemBusinessCapabilitiesTree_IncompleteCapabilityData() {
+        // Given - System with incomplete capability data
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(createSolutionOverview("Test System"));
+        
+        // Create capability with missing L2
+        BusinessCapabilityDiagramDTO.BusinessCapability incompleteCapability = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        incompleteCapability.setL1Capability("Customer Management");
+        incompleteCapability.setL2Capability(null); // Missing L2
+        incompleteCapability.setL3Capability("Contact Management");
+        
+        system.setBusinessCapabilities(Arrays.asList(incompleteCapability));
+
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isNotNull();
+        
+        // Should have no system nodes since incomplete capability is skipped
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .toList();
+        
+        // No system node should be created because the capability flow is incomplete
+        assertThat(systemNodes).isEmpty();
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should throw IllegalStateException when core service fails")
+    void testGetSystemBusinessCapabilitiesTree_CoreServiceException() {
+        // Given
+        when(coreServiceClient.getBusinessCapabilities())
+            .thenThrow(new RuntimeException("Core service unavailable"));
+
+        // When & Then
+        assertThatThrownBy(() -> diagramService.getSystemBusinessCapabilitiesTree("sys-001"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("Failed to generate business capabilities tree for system: sys-001")
+            .hasCauseInstanceOf(RuntimeException.class);
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle system with null business capabilities")
+    void testGetSystemBusinessCapabilitiesTree_NullBusinessCapabilities() {
+        // Given - System with null business capabilities
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(createSolutionOverview("Test System"));
+        system.setBusinessCapabilities(null);
+
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isEmpty();
+
+        verify(coreServiceClient).getBusinessCapabilities();
     }
 
     // ========================================
