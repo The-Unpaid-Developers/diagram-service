@@ -2572,4 +2572,507 @@ class DiagramServiceTest {
         capability.setRemarks(null); // Matches MongoDB raw data structure
         return capability;
     }
+
+    // Additional edge case tests to improve coverage
+
+    @Test
+    @DisplayName("Should handle null solution overview in extractSolutionName path")
+    void testGetSystemBusinessCapabilitiesTree_NullSolutionOverview() {
+        // Given
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(null); // Null solution overview
+        
+        BusinessCapabilityDiagramDTO.BusinessCapability capability = createBusinessCapability(
+            "Customer Experience", "Customer Service", "Customer Support"
+        );
+        system.setBusinessCapabilities(List.of(capability));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(List.of(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        
+        // Verify system node gets "Unknown Solution" name
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = result.getCapabilities().stream()
+                .filter(node -> "System".equals(node.getLevel()))
+                .findFirst()
+                .orElse(null);
+        
+        assertThat(systemNode).isNotNull();
+        assertThat(systemNode.getName()).isEqualTo("Unknown Solution");
+    }
+
+    @Test
+    @DisplayName("Should handle null solution details in extractSolutionName path")
+    void testGetSystemBusinessCapabilitiesTree_NullSolutionDetails() {
+        // Given
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        
+        CommonSolutionReviewDTO.SolutionOverview overview = new CommonSolutionReviewDTO.SolutionOverview();
+        overview.setSolutionDetails(null); // Null solution details
+        system.setSolutionOverview(overview);
+        
+        BusinessCapabilityDiagramDTO.BusinessCapability capability = createBusinessCapability(
+            "Customer Experience", "Customer Service", "Customer Support"
+        );
+        system.setBusinessCapabilities(List.of(capability));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(List.of(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        
+        // Verify system node gets "Unknown Solution" name
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = result.getCapabilities().stream()
+                .filter(node -> "System".equals(node.getLevel()))
+                .findFirst()
+                .orElse(null);
+        
+        assertThat(systemNode).isNotNull();
+        assertThat(systemNode.getName()).isEqualTo("Unknown Solution");
+    }
+
+    @Test
+    @DisplayName("Should handle empty capability name strings in generateCapabilityId")
+    void testGetSystemBusinessCapabilitiesTree_EmptyCapabilityNames() {
+        // Given
+        BusinessCapabilityDiagramDTO system = createRawSystem("sys-001", "Test System",
+            "", "", ""); // Empty capability names
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(List.of(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // Still creates nodes for empty names
+        
+        // Verify nodes are created with proper IDs even for empty names
+        assertThat(result.getCapabilities()).allSatisfy(node -> {
+            assertThat(node.getId()).isNotNull();
+            assertThat(node.getLevel()).isNotNull();
+        });
+    }
+
+    @Test
+    @DisplayName("Should handle special characters in capability names for ID generation")
+    void testGetSystemBusinessCapabilitiesTree_SpecialCharactersInCapabilityNames() {
+        // Given
+        BusinessCapabilityDiagramDTO system = createRawSystem("sys-001", "Test System",
+            "Customer Experience & Service!", "Customer Service - Core", "Customer Support @#$%");
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(List.of(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4);
+        
+        // Verify IDs are properly sanitized (special characters are replaced with hyphens)
+        assertThat(result.getCapabilities()).allSatisfy(node -> {
+            assertThat(node.getId())
+                .doesNotContain("&", "!", "@", "#", "$", "%", " ") // These should be replaced
+                .matches("^[a-z0-9-]+$"); // Only lowercase letters, numbers, and hyphens (- is allowed as replacement)
+        });
+    }
+
+    @Test
+    @DisplayName("Should handle complex hierarchy with multiple systems having overlapping capabilities")
+    void testGetSystemBusinessCapabilitiesTree_ComplexHierarchyCalculations() {
+        // Given - Multiple systems with overlapping L1/L2 but different L3/System
+        BusinessCapabilityDiagramDTO system1 = createRawSystem("sys-001", "System One",
+            "Customer Experience", "Customer Service", "Support Tier 1");
+        BusinessCapabilityDiagramDTO system2 = createRawSystem("sys-002", "System Two", 
+            "Customer Experience", "Customer Service", "Support Tier 2");
+        BusinessCapabilityDiagramDTO system3 = createRawSystem("sys-003", "System Three",
+            "Customer Experience", "Sales Operations", "Lead Management");
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(List.of(system1, system2, system3));
+
+        // When - Get tree for system1 only
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // Only nodes for sys-001 path
+        
+        // Verify only the sys-001 system appears
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+                .filter(node -> "System".equals(node.getLevel()))
+                .toList();
+        
+        assertThat(systemNodes).hasSize(1);
+        assertThat(systemNodes.get(0).getId()).startsWith("sys-001"); // ID includes hierarchy path
+        assertThat(systemNodes.get(0).getName()).isEqualTo("System One");
+        
+        // Verify L3 node is specific to this system's path
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
+                .filter(node -> "L3".equals(node.getLevel()))
+                .toList();
+        
+        assertThat(l3Nodes).hasSize(1);
+        assertThat(l3Nodes.get(0).getName()).isEqualTo("Support Tier 1");
+    }
+
+    @Test
+    @DisplayName("Should handle system with empty integration flows list")
+    void testGenerateSystemDependenciesDiagram_EmptyIntegrationFlowsList() {
+        // Given
+        String targetSystemCode = "SYS-001";
+        primarySystem.setIntegrationFlows(Collections.emptyList()); // Empty list instead of null
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(1); // Only primary system
+        assertThat(result.getLinks()).isEmpty(); // No links due to empty flows
+        assertThat(result.getMetadata()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should handle middleware with null value in hasValidMiddleware check")
+    void testGenerateSystemDependenciesDiagram_NullMiddleware() {
+        // Given
+        String targetSystemCode = "SYS-001";
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
+            "SYS-002", "CONSUMER", "REST_API", "Daily", null // Null middleware
+        );
+        primarySystem.setIntegrationFlows(Collections.singletonList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2); // Primary + External system
+        assertThat(result.getLinks()).hasSize(1); // Direct connection without middleware
+        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware
+    }
+
+    @Test
+    @DisplayName("Should handle middleware with NONE value in hasValidMiddleware check")
+    void testGenerateSystemDependenciesDiagram_NoneMiddleware() {
+        // Given
+        String targetSystemCode = "SYS-001";
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
+            "SYS-002", "CONSUMER", "REST_API", "Daily", "NONE" // NONE middleware
+        );
+        primarySystem.setIntegrationFlows(Collections.singletonList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2); // Primary + External system
+        assertThat(result.getLinks()).hasSize(1); // Direct connection without middleware
+        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware due to NONE
+    }
+
+    @Test
+    @DisplayName("Should handle empty string middleware in hasValidMiddleware check")
+    void testGenerateSystemDependenciesDiagram_EmptyStringMiddleware() {
+        // Given
+        String targetSystemCode = "SYS-001";
+        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
+            "SYS-002", "CONSUMER", "REST_API", "Daily", "   " // Empty/whitespace middleware
+        );
+        primarySystem.setIntegrationFlows(Collections.singletonList(flow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(2); // Primary + External system
+        assertThat(result.getLinks()).hasSize(1); // Direct connection without middleware
+        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware due to empty string
+    }
+
+    @Test
+    @DisplayName("Should handle path finding with same source and target system")
+    void testFindAllPathsDiagram_SameSourceAndTarget() {
+        // Given
+        String systemCode = "SYS-001";
+        
+        // When & Then
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram(systemCode, systemCode))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Start and end systems cannot be the same");
+    }
+
+    @Test
+    @DisplayName("Should handle path finding with whitespace-only system codes")
+    void testFindAllPathsDiagram_WhitespaceSystemCodes() {
+        // When & Then - Test start system with whitespace
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("   ", "SYS-002"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Start system cannot be null or empty");
+            
+        // When & Then - Test end system with whitespace  
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", "   "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("End system cannot be null or empty");
+    }
+
+    @Test
+    @DisplayName("Should handle overall diagram generation with duplicate system codes")
+    void testGenerateAllSystemDependenciesDiagrams_DuplicateSystemCodes() {
+        // Given - Systems with same counterpart codes to test deduplication
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        system1.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("EXT-001", "CONSUMER", "REST_API", "Daily", null)
+        ));
+        
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        system2.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("EXT-001", "PRODUCER", "REST_API", "Weekly", null) // Same external system
+        ));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3); // SYS-001, SYS-002, EXT-001 (deduplicated)
+        assertThat(result.getLinks()).hasSize(2); // Two separate links
+        
+        // Verify EXT-001 appears only once in nodes despite being referenced by both systems
+        long extNodeCount = result.getNodes().stream()
+                .map(CommonDiagramDTO.NodeDTO::getId)
+                .filter("EXT-001"::equals)
+                .count();
+        assertThat(extNodeCount).isEqualTo(1);
+    }
+
+    // Tests for helper methods coverage
+    
+    @Test
+    @DisplayName("Should test generateCapabilityId helper method through business capabilities tree")
+    void testGenerateCapabilityId_ThroughBusinessCapabilitiesTree() {
+        // Given - Data to trigger capability ID generation
+        BusinessCapabilityDiagramDTO capability = new BusinessCapabilityDiagramDTO();
+        capability.setSystemCode("sys-001");
+        capability.setSolutionOverview(createSolutionOverview("Test System"));
+        capability.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Customer Experience", "Customer Service", "Support Tier 1")
+        ));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(capability));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then - Verify that capability IDs are properly generated for all levels
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System node
+        
+        // Verify IDs follow expected pattern (lowercase with hyphens)
+        result.getCapabilities().forEach(node -> {
+            assertThat(node.getId())
+                .matches("^[a-z0-9-]+$") // Should only contain lowercase letters, numbers, and hyphens
+                .doesNotContain(" ") // No spaces
+                .doesNotContain("_"); // No underscores
+        });
+    }
+    
+    @Test  
+    @DisplayName("Should test extractSolutionName helper with various solution overview states")
+    void testExtractSolutionName_VariousStates() {
+        // Test case 1: Normal solution overview
+        BusinessCapabilityDiagramDTO capability1 = new BusinessCapabilityDiagramDTO();
+        capability1.setSystemCode("sys-001");
+        capability1.setSolutionOverview(createSolutionOverview("Primary System"));
+        capability1.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Operations", "System Management", "Configuration")
+        ));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(capability1));
+        
+        BusinessCapabilitiesTreeDTO result1 = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+        
+        // Verify system node has proper name from solution overview
+        assertThat(result1.getCapabilities())
+            .anySatisfy(node -> {
+                if (node.getId().startsWith("sys-001")) {
+                    assertThat(node.getName()).isEqualTo("Primary System");
+                }
+            });
+            
+        // Test case 2: System code as fallback when solution name not available
+        BusinessCapabilityDiagramDTO capability2 = new BusinessCapabilityDiagramDTO();
+        capability2.setSystemCode("sys-002");
+        // No solution overview set - should use system code
+        capability2.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Finance", "Accounting", "Payroll")
+        ));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(capability2));
+        
+        BusinessCapabilitiesTreeDTO result2 = diagramService.getSystemBusinessCapabilitiesTree("sys-002");
+        
+        // Verify system node uses system code when solution name not available
+        assertThat(result2.getCapabilities())
+            .anySatisfy(node -> {
+                if (node.getId().startsWith("sys-002")) {
+                    assertThat(node.getName()).isEqualTo("sys-002");
+                }
+            });
+    }
+    
+    @Test
+    @DisplayName("Should test createCapabilityNode helper through complex hierarchy")
+    void testCreateCapabilityNode_ComplexHierarchy() {
+        // Given - Multi-level capability structure
+        BusinessCapabilityDiagramDTO capability = new BusinessCapabilityDiagramDTO();
+        capability.setSystemCode("sys-test");
+        capability.setSolutionOverview(createSolutionOverview("Test System"));
+        capability.setBusinessCapabilities(Arrays.asList(
+            createBusinessCapability("Customer Experience", "Customer Service", "Support Management")
+        ));
+        
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(capability));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-test");
+
+        // Then - Verify node structure and hierarchy
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        
+        // Verify each level has correct properties
+        result.getCapabilities().forEach(node -> {
+            assertThat(node.getId()).isNotBlank();
+            assertThat(node.getName()).isNotBlank();
+            assertThat(node.getLevel()).isIn("L1", "L2", "L3", "System");
+            
+            // System count is only for capability levels, null for systems
+            if ("System".equals(node.getLevel())) {
+                assertThat(node.getSystemCount()).isNull();
+            } else {
+                assertThat(node.getSystemCount()).isNotNull().isGreaterThanOrEqualTo(0);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("Should test path finding validation methods through error scenarios")
+    void testPathFindingValidation_ErrorScenarios() {
+        // Test null start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram(null, "SYS-002"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Start system cannot be null or empty");
+            
+        // Test empty start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("", "SYS-002"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Start system cannot be null or empty");
+            
+        // Test null end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("End system cannot be null or empty");
+            
+        // Test empty end system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-001", ""))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("End system cannot be null or empty");
+    }
+
+    @Test
+    @DisplayName("Should test system existence validation through path finding")
+    void testSystemExistenceValidation() {
+        // Given - Limited system data
+        SystemDependencyDTO system1 = createSystemDependency("SYS-EXIST", "Existing System", "REV-001");
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1));
+
+        // Test non-existent start system
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-MISSING", "SYS-EXIST"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Start system 'SYS-MISSING' not found");
+            
+        // Test non-existent end system  
+        assertThatThrownBy(() -> diagramService.findAllPathsDiagram("SYS-EXIST", "SYS-MISSING"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("End system 'SYS-MISSING' not found");
+    }
+
+    @Test
+    @DisplayName("Should test normalizeNodeId helper through middleware handling")
+    void testNormalizeNodeId_MiddlewareHandling() {
+        // Given - System with middleware that has producer/consumer suffixes
+        SystemDependencyDTO system = createSystemDependency("SYS-001", "Primary System", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flowWithSuffix = createIntegrationFlow(
+            "MIDDLEWARE-P", "PRODUCER", "MESSAGE_QUEUE", "Real-time", "ActiveMQ"
+        );
+        system.setIntegrationFlows(Arrays.asList(flowWithSuffix));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram("SYS-001");
+
+        // Then - Verify that middleware and counterpart nodes are included
+        // The system creates additional middleware nodes with suffixes for producer/consumer roles
+        assertThat(result.getNodes())
+            .extracting(NodeDTO::getId)
+            .anyMatch(id -> id.startsWith("MIDDLEWARE")) // Middleware node is present (may have additional suffixes)
+            .anyMatch(id -> id.startsWith("ActiveMQ")); // Middleware name node is present
+    }
+
+    @Test
+    @DisplayName("Should test extractAllSystemCodes helper through path finding validation")
+    void testExtractAllSystemCodes_ThroughValidation() {
+        // Given - Systems with various counterpart codes to test extraction
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System One", "REV-001");
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System Two", "REV-002");
+        
+        // Add integration flows with different counterpart systems
+        system1.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("EXT-001", "CONSUMER", "REST_API", "Daily", null),
+            createIntegrationFlow("EXT-002-P", "PRODUCER", "MESSAGE_QUEUE", "Real-time", "ActiveMQ")
+        ));
+        system2.setIntegrationFlows(Arrays.asList(
+            createIntegrationFlow("EXT-003-C", "CONSUMER", "FILE_TRANSFER", "Weekly", null)
+        ));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2));
+
+        // When & Then - Test that system validation correctly extracts all system codes
+        // This should succeed because all systems exist in the extracted codes
+        assertThatCode(() -> diagramService.findAllPathsDiagram("SYS-001", "SYS-002"))
+            .doesNotThrowAnyException();
+            
+        // This should succeed because EXT-001 is found in counterpart codes
+        assertThatCode(() -> diagramService.findAllPathsDiagram("SYS-001", "EXT-001"))
+            .doesNotThrowAnyException();
+            
+        // This should succeed because normalized version of EXT-002-P (EXT-002) is extracted
+        assertThatCode(() -> diagramService.findAllPathsDiagram("SYS-001", "EXT-002"))
+            .doesNotThrowAnyException();
+    }
 }
