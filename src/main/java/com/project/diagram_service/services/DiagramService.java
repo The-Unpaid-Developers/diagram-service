@@ -188,14 +188,14 @@ public class DiagramService {
                 if (system.getBusinessCapabilities() != null) {
                     for (BusinessCapabilityDiagramDTO.BusinessCapability bizCap : system.getBusinessCapabilities()) {
                         // Each business capability represents one complete flow: L1 -> L2 -> L3 -> System
-                        processCapabilityFlow(system, bizCap, uniqueNodes);
+                        processCapabilityFlowSystemFirst(system, bizCap, uniqueNodes);
                     }
                 }
             }
             
             // Convert unique nodes map to list and calculate system counts
             nodes.addAll(uniqueNodes.values());
-            calculateSystemCounts(nodes);
+            calculateSystemCountsSystemFirst(nodes);
 
             tree.setCapabilities(nodes);
             log.info("Generated business capabilities tree for system: {} with {} nodes from {} capability flows", 
@@ -295,6 +295,87 @@ public class DiagramService {
                 .sum();
     }
 
+    /**
+     * Processes a single business capability flow from System -> L1 -> L2 -> L3.
+     * Creates nodes for each level if they don't already exist, ensuring proper parent-child relationships.
+     * System is the root node, followed by the capability hierarchy.
+     */
+    private void processCapabilityFlowSystemFirst(BusinessCapabilityDiagramDTO system, 
+                                                  BusinessCapabilityDiagramDTO.BusinessCapability bizCap,
+                                                  Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> uniqueNodes) {
+        
+        String l1 = bizCap.getL1Capability();
+        String l2 = bizCap.getL2Capability();
+        String l3 = bizCap.getL3Capability();
+        
+        if (l1 == null || l2 == null || l3 == null) {
+            log.warn("Incomplete capability flow for system {}: L1={}, L2={}, L3={}", 
+                     system.getSystemCode(), l1, l2, l3);
+            return;
+        }
+
+        // Create System node as root (no parent) - use "Root" level for system view
+        String systemId = system.getSystemCode();
+        if (!uniqueNodes.containsKey(systemId)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = createSystemNode(system, null, true);
+            systemNode.setId(systemId);
+            uniqueNodes.put(systemId, systemNode);
+        }
+
+        // Create L1 node with System as parent (include parent in ID for uniqueness)
+        String l1Id = generateCapabilityId(l1, "L1") + UNDER_SEPARATOR + systemId;
+        if (!uniqueNodes.containsKey(l1Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = createCapabilityNode(l1, "L1", systemId, 0);
+            l1Node.setId(l1Id);
+            uniqueNodes.put(l1Id, l1Node);
+        }
+
+        // Create L2 node with L1 as parent (include parent in ID for uniqueness)
+        String l2Id = generateCapabilityId(l2, "L2") + UNDER_SEPARATOR + l1Id;
+        if (!uniqueNodes.containsKey(l2Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = createCapabilityNode(l2, "L2", l1Id, 0);
+            l2Node.setId(l2Id);
+            uniqueNodes.put(l2Id, l2Node);
+        }
+
+        // Create L3 node with L2 as parent (include parent in ID for uniqueness)
+        String l3Id = generateCapabilityId(l3, "L3") + UNDER_SEPARATOR + l2Id;
+        if (!uniqueNodes.containsKey(l3Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = createCapabilityNode(l3, "L3", l2Id, 0);
+            l3Node.setId(l3Id);
+            uniqueNodes.put(l3Id, l3Node);
+        }
+    }
+
+    /**
+     * Calculates system counts for the System-first hierarchy after all nodes are created.
+     * System systemCount = number of direct L1 children
+     * L1 systemCount = number of direct L2 children
+     * L2 systemCount = number of direct L3 children  
+     * L3 systemCount = 0 (leaf nodes)
+     */
+    private void calculateSystemCountsSystemFirst(List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodes) {
+        Map<String, Long> childCounts = new HashMap<>();
+        
+        // Count children for each parent
+        for (BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node : nodes) {
+            if (node.getParentId() != null) {
+                childCounts.merge(node.getParentId(), 1L, Long::sum);
+            }
+        }
+        
+        // Set system counts based on child counts for all levels
+        for (BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node : nodes) {
+            if ("System".equals(node.getLevel())) {
+                // System nodes count their L1 children
+                node.setSystemCount(childCounts.getOrDefault(node.getId(), 0L).intValue());
+            } else {
+                // Capability nodes count their children (L1->L2, L2->L3, L3 has 0)
+                node.setSystemCount(childCounts.getOrDefault(node.getId(), 0L).intValue());
+            }
+        }
+    }
+
         /**
      * Creates a capability node for the specified level.
      * 
@@ -307,6 +388,7 @@ public class DiagramService {
     private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createCapabilityNode(String name, String level, String parentId, int systemCount) {
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
         // Don't set ID here - it will be set by the caller with proper flow-specific ID
+        node.setSystemCode(null); // Only for system nodes, null for capability levels
         node.setName(name);
         node.setLevel(level);
         node.setParentId(parentId);
@@ -316,13 +398,28 @@ public class DiagramService {
 
     /**
      * Creates a system node from business capability data.
-     * Uses systemCode as id and solutionName as name.
+     * Uses systemCode to store the system code and solutionName as name.
+     * The id will be set by the caller with proper flow-specific unique identifier.
      */
     private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createSystemNode(BusinessCapabilityDiagramDTO capability, String parentId) {
+        return createSystemNode(capability, parentId, false);
+    }
+
+    /**
+     * Creates a system node from business capability data with configurable level name.
+     * Uses systemCode to store the system code and solutionName as name.
+     * The id will be set by the caller with proper flow-specific unique identifier.
+     * 
+     * @param capability the business capability data
+     * @param parentId the parent node ID
+     * @param isRootLevel true to use "Root" level, false to use "System" level
+     */
+    private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createSystemNode(BusinessCapabilityDiagramDTO capability, String parentId, boolean isRootLevel) {
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
-        systemNode.setId(capability.getSystemCode());
+        // Don't set ID here - it will be set by the caller with proper flow-specific ID
+        systemNode.setSystemCode(capability.getSystemCode());
         systemNode.setName(extractSolutionName(capability));
-        systemNode.setLevel("System");
+        systemNode.setLevel(isRootLevel ? "Root" : "System");
         systemNode.setParentId(parentId);
         systemNode.setSystemCount(null); // Not applicable for systems
         return systemNode;

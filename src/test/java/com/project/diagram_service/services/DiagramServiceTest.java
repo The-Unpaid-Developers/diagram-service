@@ -1739,6 +1739,7 @@ class DiagramServiceTest {
         assertThat(l1)
             .isNotNull()
             .satisfies(node -> {
+                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
                 assertThat(node.getName()).isEqualTo("Customer Management");
                 assertThat(node.getLevel()).isEqualTo("L1");
                 assertThat(node.getParentId()).isNull();
@@ -1750,6 +1751,7 @@ class DiagramServiceTest {
         assertThat(l2)
             .isNotNull()
             .satisfies(node -> {
+                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
                 assertThat(node.getName()).isEqualTo("CRM");
                 assertThat(node.getLevel()).isEqualTo("L2");
                 assertThat(node.getParentId()).isEqualTo("l1-customer-management");
@@ -1761,6 +1763,7 @@ class DiagramServiceTest {
         assertThat(l3)
             .isNotNull()
             .satisfies(node -> {
+                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
                 assertThat(node.getName()).isEqualTo("Contact Management");
                 assertThat(node.getLevel()).isEqualTo("L3");
                 assertThat(node.getParentId()).isEqualTo("l2-crm-under-l1-customer-management");
@@ -1773,6 +1776,7 @@ class DiagramServiceTest {
             .isNotNull()
             .satisfies(node -> {
                 assertThat(node.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management"); // flow-specific ID
+                assertThat(node.getSystemCode()).isEqualTo("sys-001"); // systemCode field should contain the actual system code
                 assertThat(node.getName()).isEqualTo("NextGen Platform"); // solutionName as name
                 assertThat(node.getLevel()).isEqualTo("System");
                 assertThat(node.getParentId()).isEqualTo("l3-contact-management-under-l2-crm-under-l1-customer-management");
@@ -1795,13 +1799,14 @@ class DiagramServiceTest {
         // Then
         assertThat(result.getCapabilities()).hasSize(5); // L1 + L2 + L3 + 2 Systems
 
-        // L3 should have systemCount = 2
+        // L3 should have systemCount = 2 and null systemCode
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3 = result.getCapabilities().stream()
             .filter(n -> "L3".equals(n.getLevel()) && "Contact Management".equals(n.getName()))
             .findFirst()
             .orElseThrow();
         
         assertThat(l3.getSystemCount()).isEqualTo(2);
+        assertThat(l3.getSystemCode()).isNull(); // capability nodes should have null systemCode
 
         // Both systems should have same parent (both under same L3 flow)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systems = result.getCapabilities().stream()
@@ -1817,6 +1822,11 @@ class DiagramServiceTest {
         assertThat(systems)
             .extracting("name")
             .containsExactlyInAnyOrder("NextGen Platform", "Legacy CRM");
+        
+        // Systems should have their respective systemCodes populated
+        assertThat(systems)
+            .extracting("systemCode")
+            .containsExactlyInAnyOrder("sys-001", "sys-002");
     }
 
     @Test
@@ -2242,7 +2252,7 @@ class DiagramServiceTest {
 
         // Verify only sys-001 capabilities are included
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
-            .filter(n -> "System".equals(n.getLevel()))
+            .filter(n -> "Root".equals(n.getLevel()))
             .toList();
         
         assertThat(systemNodes).hasSize(1);
@@ -2257,12 +2267,21 @@ class DiagramServiceTest {
                     node -> node
                 ));
 
-        // Verify L1 node
+        // Verify Root node (now root in Root->L1->L2->L3 hierarchy)
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = nodeMap.values().stream()
+            .filter(n -> "Root".equals(n.getLevel()) && "CRM System".equals(n.getName()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Root node not found"));
+        assertThat(systemNode.getParentId()).isNull();
+        assertThat(systemNode.getSystemCode()).isEqualTo("sys-001"); // system node should have systemCode
+
+        // Verify L1 node (now has Root as parent)
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = nodeMap.values().stream()
             .filter(n -> "L1".equals(n.getLevel()) && "Customer Management".equals(n.getName()))
             .findFirst()
             .orElseThrow(() -> new AssertionError("L1 node not found"));
-        assertThat(l1Node.getParentId()).isNull();
+        assertThat(l1Node.getParentId()).isEqualTo(systemNode.getId());
+        assertThat(l1Node.getSystemCode()).isNull(); // capability nodes should have null systemCode
 
         // Verify L2 node
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = nodeMap.values().stream()
@@ -2270,6 +2289,7 @@ class DiagramServiceTest {
             .findFirst()
             .orElseThrow(() -> new AssertionError("L2 node not found"));
         assertThat(l2Node.getParentId()).isEqualTo(l1Node.getId());
+        assertThat(l2Node.getSystemCode()).isNull(); // capability nodes should have null systemCode
 
         // Verify L3 node
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = nodeMap.values().stream()
@@ -2277,13 +2297,7 @@ class DiagramServiceTest {
             .findFirst()
             .orElseThrow(() -> new AssertionError("L3 node not found"));
         assertThat(l3Node.getParentId()).isEqualTo(l2Node.getId());
-
-        // Verify System node
-        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = nodeMap.values().stream()
-            .filter(n -> "System".equals(n.getLevel()) && "CRM System".equals(n.getName()))
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("System node not found"));
-        assertThat(systemNode.getParentId()).isEqualTo(l3Node.getId());
+        assertThat(l3Node.getSystemCode()).isNull(); // capability nodes should have null systemCode
 
         verify(coreServiceClient).getBusinessCapabilities();
     }
@@ -2354,11 +2368,21 @@ class DiagramServiceTest {
         // When
         BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
 
-        // Then
+        // Then - System->L1->L2->L3 hierarchy: 1 System + 2 L1s + 2 L2s + 3 L3s = 8 nodes
         assertThat(result).isNotNull();
-        assertThat(result.getCapabilities()).hasSizeGreaterThanOrEqualTo(6); // At least 2 L1s + 2 L2s + 2 L3s + 3 Systems
+        assertThat(result.getCapabilities()).hasSizeGreaterThanOrEqualTo(7); // At least 1 System + 2 L1s + 2 L2s + 3 L3s
 
-        // Verify we have the expected L1 nodes
+        // Verify we have exactly one system node (root in new hierarchy)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "Root".equals(n.getLevel()))
+            .toList();
+        
+        assertThat(systemNodes).hasSize(1); // Only one system node (root)
+        assertThat(systemNodes.get(0).getName()).isEqualTo("Multi-Function System");
+        assertThat(systemNodes.get(0).getSystemCode()).isEqualTo("sys-001"); // system node should have systemCode
+        assertThat(systemNodes.get(0).getParentId()).isNull(); // Root is root
+
+        // Verify we have the expected L1 nodes (children of System)
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
             .filter(n -> "L1".equals(n.getLevel()))
             .toList();
@@ -2366,16 +2390,14 @@ class DiagramServiceTest {
         assertThat(l1Nodes)
             .extracting("name")
             .containsExactlyInAnyOrder("Customer Management", "Sales");
-
-        // Verify system nodes exist (one for each capability flow)
-        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
-            .filter(n -> "System".equals(n.getLevel()))
-            .toList();
         
-        assertThat(systemNodes).hasSize(3); // One system node per capability flow
-        assertThat(systemNodes)
-            .extracting("name")
-            .containsOnly("Multi-Function System"); // All should have same name
+        // Verify all L1 nodes have System as parent and null systemCode
+        assertThat(l1Nodes)
+            .extracting("parentId")
+            .containsOnly(systemNodes.get(0).getId());
+        assertThat(l1Nodes)
+            .extracting("systemCode")
+            .containsOnly((String) null); // capability nodes should have null systemCode
 
         verify(coreServiceClient).getBusinessCapabilities();
     }
@@ -2599,11 +2621,11 @@ class DiagramServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, Root
         
         // Verify system node gets "Unknown Solution" name
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = result.getCapabilities().stream()
-                .filter(node -> "System".equals(node.getLevel()))
+                .filter(node -> "Root".equals(node.getLevel()))
                 .findFirst()
                 .orElse(null);
         
@@ -2634,11 +2656,11 @@ class DiagramServiceTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, Root
         
         // Verify system node gets "Unknown Solution" name
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = result.getCapabilities().stream()
-                .filter(node -> "System".equals(node.getLevel()))
+                .filter(node -> "Root".equals(node.getLevel()))
                 .findFirst()
                 .orElse(null);
         
@@ -2715,7 +2737,7 @@ class DiagramServiceTest {
         
         // Verify only the sys-001 system appears
         List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
-                .filter(node -> "System".equals(node.getLevel()))
+                .filter(node -> "Root".equals(node.getLevel()))
                 .toList();
         
         assertThat(systemNodes).hasSize(1);
@@ -2931,17 +2953,17 @@ class DiagramServiceTest {
         BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-test");
 
         // Then - Verify node structure and hierarchy
-        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, System
+        assertThat(result.getCapabilities()).hasSize(4); // L1, L2, L3, Root
         
         // Verify each level has correct properties
         result.getCapabilities().forEach(node -> {
             assertThat(node.getId()).isNotBlank();
             assertThat(node.getName()).isNotBlank();
-            assertThat(node.getLevel()).isIn("L1", "L2", "L3", "System");
+            assertThat(node.getLevel()).isIn("L1", "L2", "L3", "Root");
             
-            // System count is only for capability levels, null for systems
-            if ("System".equals(node.getLevel())) {
-                assertThat(node.getSystemCount()).isNull();
+            // In Root->L1->L2->L3 hierarchy: Root counts L1 children, L1 counts L2 children, etc.
+            if ("Root".equals(node.getLevel())) {
+                assertThat(node.getSystemCount()).isNotNull().isGreaterThanOrEqualTo(0);
             } else {
                 assertThat(node.getSystemCount()).isNotNull().isGreaterThanOrEqualTo(0);
             }
