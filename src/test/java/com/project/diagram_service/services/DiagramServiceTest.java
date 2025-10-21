@@ -14,6 +14,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -2746,13 +2750,14 @@ class DiagramServiceTest {
         assertThat(result.getMetadata()).isNotNull();
     }
 
-    @Test
-    @DisplayName("Should handle middleware with null value in hasValidMiddleware check")
-    void testGenerateSystemDependenciesDiagram_NullMiddleware() {
+    @ParameterizedTest
+    @MethodSource("invalidMiddlewareValues")
+    @DisplayName("Should handle invalid middleware values in hasValidMiddleware check")
+    void shouldHandleInvalidMiddlewareValues(String middlewareValue, String description) {
         // Given
         String targetSystemCode = "SYS-001";
         SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
-            "SYS-002", "CONSUMER", "REST_API", "Daily", null // Null middleware
+            "SYS-002", "CONSUMER", "REST_API", "Daily", middlewareValue
         );
         primarySystem.setIntegrationFlows(Collections.singletonList(flow));
         
@@ -2768,48 +2773,12 @@ class DiagramServiceTest {
         assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware
     }
 
-    @Test
-    @DisplayName("Should handle middleware with NONE value in hasValidMiddleware check")
-    void testGenerateSystemDependenciesDiagram_NoneMiddleware() {
-        // Given
-        String targetSystemCode = "SYS-001";
-        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
-            "SYS-002", "CONSUMER", "REST_API", "Daily", "NONE" // NONE middleware
+    private static Stream<Arguments> invalidMiddlewareValues() {
+        return Stream.of(
+            Arguments.of(null, "null middleware"),
+            Arguments.of("NONE", "NONE middleware"),
+            Arguments.of("   ", "empty/whitespace middleware")
         );
-        primarySystem.setIntegrationFlows(Collections.singletonList(flow));
-        
-        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem));
-
-        // When
-        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
-
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getNodes()).hasSize(2); // Primary + External system
-        assertThat(result.getLinks()).hasSize(1); // Direct connection without middleware
-        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware due to NONE
-    }
-
-    @Test
-    @DisplayName("Should handle empty string middleware in hasValidMiddleware check")
-    void testGenerateSystemDependenciesDiagram_EmptyStringMiddleware() {
-        // Given
-        String targetSystemCode = "SYS-001";
-        SystemDependencyDTO.IntegrationFlow flow = createIntegrationFlow(
-            "SYS-002", "CONSUMER", "REST_API", "Daily", "   " // Empty/whitespace middleware
-        );
-        primarySystem.setIntegrationFlows(Collections.singletonList(flow));
-        
-        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem));
-
-        // When
-        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(targetSystemCode);
-
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getNodes()).hasSize(2); // Primary + External system
-        assertThat(result.getLinks()).hasSize(1); // Direct connection without middleware
-        assertThat(result.getMetadata().getIntegrationMiddleware()).isEmpty(); // No middleware due to empty string
     }
 
     @Test
