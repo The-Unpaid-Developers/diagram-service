@@ -314,10 +314,10 @@ public class DiagramService {
             return;
         }
 
-        // Create System node as root (no parent)
+        // Create System node as root (no parent) - use "Root" level for system view
         String systemId = system.getSystemCode();
         if (!uniqueNodes.containsKey(systemId)) {
-            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = createSystemNode(system, null);
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = createSystemNode(system, null, true);
             systemNode.setId(systemId);
             uniqueNodes.put(systemId, systemNode);
         }
@@ -402,11 +402,24 @@ public class DiagramService {
      * The id will be set by the caller with proper flow-specific unique identifier.
      */
     private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createSystemNode(BusinessCapabilityDiagramDTO capability, String parentId) {
+        return createSystemNode(capability, parentId, false);
+    }
+
+    /**
+     * Creates a system node from business capability data with configurable level name.
+     * Uses systemCode to store the system code and solutionName as name.
+     * The id will be set by the caller with proper flow-specific unique identifier.
+     * 
+     * @param capability the business capability data
+     * @param parentId the parent node ID
+     * @param isRootLevel true to use "Root" level, false to use "System" level
+     */
+    private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createSystemNode(BusinessCapabilityDiagramDTO capability, String parentId, boolean isRootLevel) {
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
         // Don't set ID here - it will be set by the caller with proper flow-specific ID
         systemNode.setSystemCode(capability.getSystemCode());
         systemNode.setName(extractSolutionName(capability));
-        systemNode.setLevel("System");
+        systemNode.setLevel(isRootLevel ? "Root" : "System");
         systemNode.setParentId(parentId);
         systemNode.setSystemCount(null); // Not applicable for systems
         return systemNode;
