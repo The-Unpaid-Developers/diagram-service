@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1722,11 +1723,11 @@ class DiagramServiceTest {
         // When
         BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
 
-        // Then
+        // Then - Verify basic structure
         assertThat(result).isNotNull();
         assertThat(result.getCapabilities()).hasSize(4); // L1 + L2 + L3 + System
 
-        // Verify complete chain: L1 -> L2 -> L3 -> System
+        // Create node map for efficient lookups
         Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodeMap = 
             result.getCapabilities().stream()
                 .collect(Collectors.toMap(
@@ -1734,54 +1735,32 @@ class DiagramServiceTest {
                     node -> node
                 ));
 
-        // L1: Customer Management
+        // Verify L1: Customer Management
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1 = nodeMap.get("l1-customer-management");
-        assertThat(l1)
-            .isNotNull()
-            .satisfies(node -> {
-                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
-                assertThat(node.getName()).isEqualTo("Customer Management");
-                assertThat(node.getLevel()).isEqualTo("L1");
-                assertThat(node.getParentId()).isNull();
-                assertThat(node.getSystemCount()).isEqualTo(1); // 1 L2 child
-            });
+        assertThat(l1).isNotNull();
+        assertThat(l1).extracting("systemCode", "name", "level", "parentId", "systemCount")
+                     .containsExactly(null, "Customer Management", "L1", null, 1);
 
-        // L2: CRM (parent: L1)
+        // Verify L2: CRM (parent: L1)
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2 = nodeMap.get("l2-crm-under-l1-customer-management");
-        assertThat(l2)
-            .isNotNull()
-            .satisfies(node -> {
-                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
-                assertThat(node.getName()).isEqualTo("CRM");
-                assertThat(node.getLevel()).isEqualTo("L2");
-                assertThat(node.getParentId()).isEqualTo("l1-customer-management");
-                assertThat(node.getSystemCount()).isEqualTo(1); // 1 L3 child
-            });
+        assertThat(l2).isNotNull();
+        assertThat(l2).extracting("systemCode", "name", "level", "parentId", "systemCount")
+                     .containsExactly(null, "CRM", "L2", "l1-customer-management", 1);
 
-        // L3: Contact Management (parent: L2)
+        // Verify L3: Contact Management (parent: L2)
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3 = nodeMap.get("l3-contact-management-under-l2-crm-under-l1-customer-management");
-        assertThat(l3)
-            .isNotNull()
-            .satisfies(node -> {
-                assertThat(node.getSystemCode()).isNull(); // capability nodes should have null systemCode
-                assertThat(node.getName()).isEqualTo("Contact Management");
-                assertThat(node.getLevel()).isEqualTo("L3");
-                assertThat(node.getParentId()).isEqualTo("l2-crm-under-l1-customer-management");
-                assertThat(node.getSystemCount()).isEqualTo(1); // 1 system child
-            });
+        assertThat(l3).isNotNull();
+        assertThat(l3).extracting("systemCode", "name", "level", "parentId", "systemCount")
+                     .containsExactly(null, "Contact Management", "L3", "l2-crm-under-l1-customer-management", 1);
 
-        // System: NextGen Platform (parent: L3)
+        // Verify System: NextGen Platform (parent: L3)
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode system = nodeMap.get("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
-        assertThat(system)
-            .isNotNull()
-            .satisfies(node -> {
-                assertThat(node.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management"); // flow-specific ID
-                assertThat(node.getSystemCode()).isEqualTo("sys-001"); // systemCode field should contain the actual system code
-                assertThat(node.getName()).isEqualTo("NextGen Platform"); // solutionName as name
-                assertThat(node.getLevel()).isEqualTo("System");
-                assertThat(node.getParentId()).isEqualTo("l3-contact-management-under-l2-crm-under-l1-customer-management");
-                assertThat(node.getSystemCount()).isNull(); // null for systems
-            });
+        assertThat(system).isNotNull();
+        assertThat(system).extracting("systemCode", "name", "level", "parentId", "systemCount")
+                          .containsExactly("sys-001", "NextGen Platform", "System", "l3-contact-management-under-l2-crm-under-l1-customer-management", null);
+        
+        // Verify system has correct flow-specific ID
+        assertThat(system.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
 
         verify(coreServiceClient).getBusinessCapabilities();
     }
@@ -2440,6 +2419,107 @@ class DiagramServiceTest {
     }
 
     @Test
+    @DisplayName("Should handle multiple types of incomplete capability data")
+    void testGetSystemBusinessCapabilitiesTree_MultipleIncompleteCapabilityTypes() {
+        // Given - System with various incomplete capability data scenarios
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(createSolutionOverview("Test System"));
+        
+        // Create different incomplete capabilities to test all null branches
+        BusinessCapabilityDiagramDTO.BusinessCapability missingL1 = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        missingL1.setL1Capability(null); // Missing L1
+        missingL1.setL2Capability("Account Management");
+        missingL1.setL3Capability("Contact Management");
+        
+        BusinessCapabilityDiagramDTO.BusinessCapability missingL3 = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        missingL3.setL1Capability("Customer Management");
+        missingL3.setL2Capability("Account Management");
+        missingL3.setL3Capability(null); // Missing L3
+        
+        BusinessCapabilityDiagramDTO.BusinessCapability allNull = 
+            new BusinessCapabilityDiagramDTO.BusinessCapability();
+        allNull.setL1Capability(null);
+        allNull.setL2Capability(null);
+        allNull.setL3Capability(null);
+        
+        // Add one complete capability to ensure the system still processes valid ones
+        BusinessCapabilityDiagramDTO.BusinessCapability completeCapability = createBusinessCapability(
+            "Sales Management", "Lead Management", "Lead Tracking"
+        );
+        
+        system.setBusinessCapabilities(Arrays.asList(missingL1, missingL3, allNull, completeCapability));
+
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isNotNull();
+        
+        // Should only have system nodes for complete capabilities
+        // In system-first hierarchy, system nodes have "Root" level
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "Root".equals(n.getLevel()) && n.getSystemCode() != null)
+            .toList();
+        
+        // Only one system node should be created for the complete capability
+        assertThat(systemNodes).hasSize(1);
+        assertThat(systemNodes.get(0).getSystemCode()).isEqualTo("sys-001");
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle system-level node processing in system-first hierarchy")
+    void testGetSystemBusinessCapabilitiesTree_SystemLevelNodeProcessing() {
+        // Given - System with business capabilities to test system-first processing
+        BusinessCapabilityDiagramDTO system = new BusinessCapabilityDiagramDTO();
+        system.setSystemCode("sys-001");
+        system.setSolutionOverview(createSolutionOverview("Test System"));
+        
+        // Add multiple capabilities to ensure system node has children for counting
+        BusinessCapabilityDiagramDTO.BusinessCapability capability1 = createBusinessCapability(
+            "Customer Management", "CRM", "Contact Management"
+        );
+        BusinessCapabilityDiagramDTO.BusinessCapability capability2 = createBusinessCapability(
+            "Sales Management", "Lead Management", "Lead Tracking"
+        );
+        
+        system.setBusinessCapabilities(Arrays.asList(capability1, capability2));
+
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(system));
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getSystemBusinessCapabilitiesTree("sys-001");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCapabilities()).isNotNull();
+        
+        // Find the system node (should be at root level with "Root" level)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "Root".equals(n.getLevel()) && "sys-001".equals(n.getSystemCode()))
+            .toList();
+        
+        assertThat(systemNodes).hasSize(1);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = systemNodes.get(0);
+        
+        // Verify system node has child count (L1 children) calculated correctly
+        // Should have systemCount reflecting number of unique L1 children
+        assertThat(systemNode.getSystemCount()).isEqualTo(2); // Two unique L1 capabilities
+        assertThat(systemNode.getSystemCode()).isEqualTo("sys-001");
+        assertThat(systemNode.getLevel()).isEqualTo("Root");
+        assertThat(systemNode.getParentId()).isNull(); // Root node has no parent
+
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
     @DisplayName("Should throw IllegalStateException when core service fails")
     void testGetSystemBusinessCapabilitiesTree_CoreServiceException() {
         // Given
@@ -3065,5 +3145,86 @@ class DiagramServiceTest {
         // This should succeed because normalized version of EXT-002-P (EXT-002) is extracted
         assertThatCode(() -> diagramService.findAllPathsDiagram("SYS-001", "EXT-002"))
             .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Should handle processed links duplication prevention")
+    void testGenerateSystemDependenciesDiagram_ProcessedLinksDeduplication() {
+        // Given - Create a complex scenario that could generate duplicate link identifiers
+        String systemCode = "SYS-001";
+        
+        // Create primary system with multiple flows that could create the same linkId
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null); // Exact duplicate
+        primarySystem.setIntegrationFlows(Arrays.asList(flow1, flow2));
+        
+        // Create external system that references back to primary
+        SystemDependencyDTO externalSystem2 = createSystemDependency("SYS-002", "External System", "REV-002");
+        SystemDependencyDTO.IntegrationFlow reverseFlow = createIntegrationFlow("SYS-001", "PRODUCER", "REST_API", "Daily", null);
+        externalSystem2.setIntegrationFlows(Arrays.asList(reverseFlow));
+        
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(primarySystem, externalSystem2));
+
+        // When
+        SpecificSystemDependenciesDiagramDTO result = diagramService.generateSystemDependenciesDiagram(systemCode);
+
+        // Then - Should handle duplicate flows gracefully without creating duplicate links
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSizeGreaterThanOrEqualTo(2);
+        
+        // Links should be properly deduplicated - no exact duplicates should exist
+        List<CommonDiagramDTO.DetailedLinkDTO> links = result.getLinks();
+        assertThat(links).isNotNull();
+        
+        // Check that there are no exact duplicate links (same source, target, pattern, frequency, role)
+        Set<String> linkSignatures = new HashSet<>();
+        for (CommonDiagramDTO.DetailedLinkDTO link : links) {
+            String signature = link.getSource() + "->" + link.getTarget() + ":" + 
+                             link.getPattern() + ":" + link.getFrequency() + ":" + link.getRole();
+            assertThat(linkSignatures).doesNotContain(signature);
+            linkSignatures.add(signature);
+        }
+        
+        verify(coreServiceClient).getSystemDependencies();
+    }
+
+    @Test
+    @DisplayName("Should handle reverse link counting in overall system dependencies")
+    void testGenerateAllSystemDependenciesDiagrams_ReverseLinkCounting() {
+        // Given - Create systems with flows that would create reverse link scenarios
+        SystemDependencyDTO system1 = createSystemDependency("SYS-001", "System A", "REV-001");
+        SystemDependencyDTO.IntegrationFlow flow1 = createIntegrationFlow("SYS-002", "CONSUMER", "REST_API", "Daily", null);
+        system1.setIntegrationFlows(Arrays.asList(flow1));
+
+        SystemDependencyDTO system2 = createSystemDependency("SYS-002", "System B", "REV-002");
+        SystemDependencyDTO.IntegrationFlow flow2 = createIntegrationFlow("SYS-003", "CONSUMER", "MESSAGE_QUEUE", "Hourly", null);
+        system2.setIntegrationFlows(Arrays.asList(flow2));
+        
+        SystemDependencyDTO system3 = createSystemDependency("SYS-003", "System C", "REV-003");
+        SystemDependencyDTO.IntegrationFlow flow3 = createIntegrationFlow("SYS-002", "PRODUCER", "MESSAGE_QUEUE", "Hourly", null); // Reverse of flow2
+        system3.setIntegrationFlows(Arrays.asList(flow3));
+
+        when(coreServiceClient.getSystemDependencies()).thenReturn(Arrays.asList(system1, system2, system3));
+
+        // When
+        OverallSystemDependenciesDiagramDTO result = diagramService.generateAllSystemDependenciesDiagrams();
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getNodes()).hasSize(3);
+        assertThat(result.getLinks()).hasSize(2); // SYS-001->SYS-002 and SYS-002<->SYS-003 (bidirectional)
+        
+        // Find the bidirectional link between SYS-002 and SYS-003
+        CommonDiagramDTO.SimpleLinkDTO bidirectionalLink = result.getLinks().stream()
+            .filter(link -> (link.getSource().equals("SYS-002") && link.getTarget().equals("SYS-003")) ||
+                           (link.getSource().equals("SYS-003") && link.getTarget().equals("SYS-002")))
+            .findFirst()
+            .orElse(null);
+        
+        assertThat(bidirectionalLink).isNotNull();
+        // Should have count = 2 due to reverse link handling
+        assertThat(bidirectionalLink.getCount()).isEqualTo(2);
+        
+        verify(coreServiceClient).getSystemDependencies();
     }
 }
