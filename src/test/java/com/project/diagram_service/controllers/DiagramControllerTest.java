@@ -815,6 +815,213 @@ class DiagramControllerTest {
         verify(diagramService).generateAllSystemDependenciesDiagrams();
     }
 
+    // ========================================
+    // System-Specific Business Capabilities Tests
+    // ========================================
+
+    @Test
+    @DisplayName("Should return system-specific business capabilities tree successfully")
+    void testGetSystemBusinessCapabilitiesTree_Success() throws Exception {
+        // Given
+        String systemCode = "sys-001";
+        BusinessCapabilitiesTreeDTO systemTree = new BusinessCapabilitiesTreeDTO();
+        
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l1Node.setId("l1-customer-management");
+        l1Node.setName("Customer Management");
+        l1Node.setLevel("L1");
+        l1Node.setParentId(null);
+        l1Node.setSystemCount(1);
+
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l2Node.setId("l2-crm-under-l1-customer-management");
+        l2Node.setName("CRM");
+        l2Node.setLevel("L2");
+        l2Node.setParentId("l1-customer-management");
+        l2Node.setSystemCount(1);
+
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        l3Node.setId("l3-contact-management-under-l2-crm-under-l1-customer-management");
+        l3Node.setName("Contact Management");
+        l3Node.setLevel("L3");
+        l3Node.setParentId("l2-crm-under-l1-customer-management");
+        l3Node.setSystemCount(1);
+
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode systemNode = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        systemNode.setId("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
+        systemNode.setName("CRM System");
+        systemNode.setLevel("System");
+        systemNode.setParentId("l3-contact-management-under-l2-crm-under-l1-customer-management");
+        systemNode.setSystemCount(null);
+
+        systemTree.setCapabilities(Arrays.asList(l1Node, l2Node, l3Node, systemNode));
+        
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode)).thenReturn(systemTree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.capabilities", hasSize(4)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L1')]", hasSize(1)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L2')]", hasSize(1)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L3')]", hasSize(1)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'System')]", hasSize(1)))
+                .andExpect(jsonPath("$.capabilities[0].name").value("Customer Management"))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'System' && @.name == 'CRM System')]", hasSize(1)));
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should return empty tree when system has no business capabilities")
+    void testGetSystemBusinessCapabilitiesTree_EmptyResult() throws Exception {
+        // Given
+        String systemCode = "nonexistent-sys";
+        BusinessCapabilitiesTreeDTO emptyTree = new BusinessCapabilitiesTreeDTO();
+        emptyTree.setCapabilities(Collections.emptyList());
+        
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode)).thenReturn(emptyTree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.capabilities", hasSize(0)));
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should handle special characters in system code")
+    void testGetSystemBusinessCapabilitiesTree_SpecialCharacters() throws Exception {
+        // Given
+        String systemCode = "sys-001_TEST";
+        BusinessCapabilitiesTreeDTO tree = new BusinessCapabilitiesTreeDTO();
+        tree.setCapabilities(Collections.emptyList());
+        
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode)).thenReturn(tree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON));
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should return 400 when system code contains invalid path characters")
+    void testGetSystemBusinessCapabilitiesTree_InvalidPathCharacters() throws Exception {
+        // When & Then - This tests URL path handling with forward slash
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/sys/001")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isNotFound()); // Spring will treat this as a different endpoint
+
+        verifyNoInteractions(diagramService);
+    }
+
+    @Test
+    @DisplayName("Should return 500 when service throws IllegalArgumentException")
+    void testGetSystemBusinessCapabilitiesTree_IllegalArgumentException() throws Exception {
+        // Given
+        String systemCode = "invalid-sys";
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode))
+                .thenThrow(new IllegalArgumentException("System code cannot be null or empty"));
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should return 500 when service throws IllegalStateException")
+    void testGetSystemBusinessCapabilitiesTree_IllegalStateException() throws Exception {
+        // Given
+        String systemCode = "sys-001";
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode))
+                .thenThrow(new IllegalStateException("Failed to generate business capabilities tree for system: " + systemCode));
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should return 500 when service throws runtime exception")
+    void testGetSystemBusinessCapabilitiesTree_RuntimeException() throws Exception {
+        // Given
+        String systemCode = "sys-001";
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode))
+                .thenThrow(new RuntimeException("Unexpected error"));
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isInternalServerError());
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
+    @Test
+    @DisplayName("Should handle complex system tree with multiple capability flows")
+    void testGetSystemBusinessCapabilitiesTree_ComplexTree() throws Exception {
+        // Given
+        String systemCode = "multi-sys-001";
+        BusinessCapabilitiesTreeDTO complexTree = new BusinessCapabilitiesTreeDTO();
+        
+        // Create multiple L1, L2, L3 nodes and multiple system entries
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Customer = createCapabilityNode("l1-customer", "Customer Management", "L1", null, 2);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Sales = createCapabilityNode("l1-sales", "Sales", "L1", null, 1);
+        
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Crm = createCapabilityNode("l2-crm", "CRM", "L2", "l1-customer", 2);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Pipeline = createCapabilityNode("l2-pipeline", "Pipeline", "L2", "l1-sales", 1);
+        
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Contact = createCapabilityNode("l3-contact", "Contact Management", "L3", "l2-crm", 1);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Lead = createCapabilityNode("l3-lead", "Lead Management", "L3", "l2-crm", 1);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Opportunity = createCapabilityNode("l3-opportunity", "Opportunity Management", "L3", "l2-pipeline", 1);
+        
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode sys1 = createCapabilityNode("sys-contact", "Multi-Function System", "System", "l3-contact", null);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode sys2 = createCapabilityNode("sys-lead", "Multi-Function System", "System", "l3-lead", null);
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode sys3 = createCapabilityNode("sys-opportunity", "Multi-Function System", "System", "l3-opportunity", null);
+        
+        complexTree.setCapabilities(Arrays.asList(l1Customer, l1Sales, l2Crm, l2Pipeline, l3Contact, l3Lead, l3Opportunity, sys1, sys2, sys3));
+        
+        when(diagramService.getSystemBusinessCapabilitiesTree(systemCode)).thenReturn(complexTree);
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/diagram/business-capabilities/{systemCode}", systemCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.capabilities", hasSize(10)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L1')]", hasSize(2)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L2')]", hasSize(2)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L3')]", hasSize(3)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'System')]", hasSize(3)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'L1' && @.systemCount > 1)]", hasSize(1)))
+                .andExpect(jsonPath("$.capabilities[?(@.level == 'System' && @.name == 'Multi-Function System')]", hasSize(3)));
+
+        verify(diagramService).getSystemBusinessCapabilitiesTree(systemCode);
+    }
+
     // Helper methods for creating test data
     private CommonDiagramDTO.NodeDTO createNode(String id, String name, String type, String criticality) {
         CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
@@ -831,5 +1038,16 @@ class DiagramControllerTest {
         link.setTarget(target);
         link.setCount(count);
         return link;
+    }
+
+    private BusinessCapabilitiesTreeDTO.BusinessCapabilityNode createCapabilityNode(
+            String id, String name, String level, String parentId, Integer systemCount) {
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode node = new BusinessCapabilitiesTreeDTO.BusinessCapabilityNode();
+        node.setId(id);
+        node.setName(name);
+        node.setLevel(level);
+        node.setParentId(parentId);
+        node.setSystemCount(systemCount);
+        return node;
     }
 }

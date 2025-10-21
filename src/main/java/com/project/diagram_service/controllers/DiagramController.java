@@ -116,6 +116,41 @@ public class DiagramController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    /**
+     * Retrieves business capabilities hierarchy for a specific system.
+     *
+     * This endpoint returns business capabilities organized in a hierarchical tree structure
+     * filtered to show only the capabilities that are relevant to the specified system.
+     * The hierarchy follows the flow: System → L3 → L2 → L1.
+     *
+     * The response includes:
+     *   Only L1, L2, L3 capability levels that contain the specified system
+     *   System-level nodes with detailed metadata for the target system
+     *   Parent-child relationships showing the capability path for the system
+     *   Filtered view excluding irrelevant business capabilities
+     *
+     * This provides a focused view of where a specific system fits within the
+     * organization's business capability landscape, showing the complete hierarchy
+     * from the system up through L3, L2, and L1 levels.
+     *
+     * @param systemCode the unique identifier of the system to filter capabilities for
+     * @return a {@link ResponseEntity} containing a {@link BusinessCapabilitiesTreeDTO}
+     *         with filtered capabilities, HTTP 200 on success, or HTTP 500 on internal server error
+     * @throws RuntimeException if the specified system code is not found
+     */
+    @GetMapping("/business-capabilities/{systemCode}")
+    public ResponseEntity<BusinessCapabilitiesTreeDTO> getSystemBusinessCapabilitiesTree(@PathVariable String systemCode) {
+        log.info("Received request for business capabilities tree for system: {}", systemCode);
+        
+        try {
+            BusinessCapabilitiesTreeDTO tree = diagramService.getSystemBusinessCapabilitiesTree(systemCode);
+            return ResponseEntity.ok(tree);
+        } catch (Exception e) {
+            log.error("Error getting business capabilities tree for system {}: {}", systemCode, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
     
     /**
      * Generates and retrieves a system dependencies diagram for a specific system.
