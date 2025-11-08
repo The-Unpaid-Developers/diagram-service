@@ -7,7 +7,6 @@ services:
     container_name: diagram_service
     environment:
       - CORE_SERVICE_URL=${CORE_SERVICE_URL:-http://host.docker.internal:8080}
-      - SPRING_PROFILES_ACTIVE=docker
     ports:
       - "8081:8081"
     restart: unless-stopped
