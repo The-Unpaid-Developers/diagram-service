@@ -19,21 +19,27 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults())
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/**").permitAll()
-                .anyRequest().permitAll()
-            );
+                .csrf(csrf -> csrf.disable())
+                .cors(Customizer.withDefaults())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/**").permitAll()
+                        .anyRequest().permitAll());
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        // Explicit dev origin
-        cfg.setAllowedOrigins(List.of("http://localhost:80", "http://host.docker.internal:80", "http://localhost", "http://host.docker.internal", "http://localhost:5173"));
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+        // Allowed origins for dev and production (TODO: move to proxy service)
+        cfg.setAllowedOrigins(List.of(
+                "https://fyp.bchewy.com", // Production
+                "http://localhost:80",
+                "http://host.docker.internal:80",
+                "http://localhost",
+                "http://host.docker.internal",
+                "http://localhost:5173" // Local dev
+        ));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
         cfg.setMaxAge(3600L);
