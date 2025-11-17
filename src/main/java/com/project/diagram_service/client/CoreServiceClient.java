@@ -2,6 +2,7 @@ package com.project.diagram_service.client;
 
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -86,6 +87,31 @@ public class CoreServiceClient {
             HttpMethod.GET,
             null,
             new ParameterizedTypeReference<List<BusinessCapabilityDiagramDTO>>() {}
+        ).getBody();
+    }
+    
+    /**
+     * Retrieves all business capabilities from the dropdown endpoint.
+     *
+     * This method makes an HTTP GET request to the core service's business capabilities
+     * dropdown endpoint and returns a list of all business capabilities with their
+     * L1, L2, and L3 hierarchy levels.
+     *
+     * This endpoint provides the complete set of business capabilities regardless of
+     * whether they are associated with any systems, making it ideal for building a
+     * comprehensive business capability tree structure.
+     *
+     * @return a {@link List} of {@link BusinessCapabilityDTO} containing all business capabilities
+     * @throws org.springframework.web.client.RestClientException if the HTTP request fails
+     * @throws RuntimeException if there's an error during the request or response processing
+     */
+    public List<BusinessCapabilityDTO> getAllBusinessCapabilities() {
+        String url = baseUrl + "/api/v1/dropdowns/business-capabilities";
+        return restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            null,
+            new ParameterizedTypeReference<List<BusinessCapabilityDTO>>() {}
         ).getBody();
     }
 }
