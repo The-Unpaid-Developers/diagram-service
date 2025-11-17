@@ -2280,13 +2280,13 @@ class DiagramServiceTest {
             .filter(n -> "Lead Management".equals(n.getName()))
             .findFirst()
             .orElseThrow();
-        assertThat(leadMgmtL3.getSystemCount()).isEqualTo(0);  // No systems
+        assertThat(leadMgmtL3.getSystemCount()).isZero();  // No systems
 
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode glL3 = l3Nodes.stream()
             .filter(n -> "General Ledger".equals(n.getName()))
             .findFirst()
             .orElseThrow();
-        assertThat(glL3.getSystemCount()).isEqualTo(0);  // No systems
+        assertThat(glL3.getSystemCount()).isZero();  // No systems
 
         verify(coreServiceClient).getAllBusinessCapabilities();
         verify(coreServiceClient).getBusinessCapabilities();
@@ -2324,7 +2324,7 @@ class DiagramServiceTest {
             .filter(n -> "L3".equals(n.getLevel()) && n.getName().equals("General Ledger"))
             .findFirst()
             .orElseThrow();
-        assertThat(financeL3.getSystemCount()).isEqualTo(0);
+        assertThat(financeL3.getSystemCount()).isZero();
 
         // Customer Management L3 should have 1 system
         BusinessCapabilitiesTreeDTO.BusinessCapabilityNode crmL3 = result.getCapabilities().stream()
