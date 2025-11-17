@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDTO;
 import com.project.diagram_service.dto.CommonSolutionReviewDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -243,5 +244,92 @@ class CoreServiceClientTest {
         capability2.setSolutionOverview(overview2);
 
         return Arrays.asList(capability1, capability2);
+    }
+
+    @Test
+    @DisplayName("Should successfully retrieve all business capabilities from dropdown endpoint")
+    void testGetAllBusinessCapabilities_Success() throws JsonProcessingException {
+        // Given
+        List<BusinessCapabilityDTO> expectedResponse = createMockAllBusinessCapabilities();
+        String jsonResponse = objectMapper.writeValueAsString(expectedResponse);
+
+        mockServer.expect(requestTo(baseUrl + "/api/v1/dropdowns/business-capabilities"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+        // When
+        List<BusinessCapabilityDTO> result = coreServiceClient.getAllBusinessCapabilities();
+
+        // Then
+        assertThat(result)
+            .isNotNull()
+            .hasSize(3)
+            .satisfies(capabilities -> {
+                assertThat(capabilities.get(0).getL1()).isEqualTo("Customer Management");
+                assertThat(capabilities.get(0).getL2()).isEqualTo("CRM");
+                assertThat(capabilities.get(0).getL3()).isEqualTo("Contact Management");
+                
+                assertThat(capabilities.get(1).getL1()).isEqualTo("Customer Management");
+                assertThat(capabilities.get(1).getL2()).isEqualTo("CRM");
+                assertThat(capabilities.get(1).getL3()).isEqualTo("Lead Management");
+                
+                assertThat(capabilities.get(2).getL1()).isEqualTo("Finance");
+                assertThat(capabilities.get(2).getL2()).isEqualTo("Accounting");
+                assertThat(capabilities.get(2).getL3()).isEqualTo("General Ledger");
+            });
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should handle HTTP error when retrieving all business capabilities")
+    void testGetAllBusinessCapabilities_HttpError() {
+        // Given
+        mockServer.expect(requestTo(baseUrl + "/api/v1/dropdowns/business-capabilities"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        // When & Then
+        assertThatThrownBy(() -> coreServiceClient.getAllBusinessCapabilities())
+                .isInstanceOf(RestClientException.class);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Should handle empty response for all business capabilities")
+    void testGetAllBusinessCapabilities_EmptyResponse() throws JsonProcessingException {
+        // Given
+        String jsonResponse = objectMapper.writeValueAsString(Arrays.asList());
+
+        mockServer.expect(requestTo(baseUrl + "/api/v1/dropdowns/business-capabilities"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+        // When
+        List<BusinessCapabilityDTO> result = coreServiceClient.getAllBusinessCapabilities();
+
+        // Then
+        assertThat(result)
+            .isNotNull()
+            .isEmpty();
+        mockServer.verify();
+    }
+
+    private List<BusinessCapabilityDTO> createMockAllBusinessCapabilities() {
+        BusinessCapabilityDTO cap1 = new BusinessCapabilityDTO();
+        cap1.setL1("Customer Management");
+        cap1.setL2("CRM");
+        cap1.setL3("Contact Management");
+
+        BusinessCapabilityDTO cap2 = new BusinessCapabilityDTO();
+        cap2.setL1("Customer Management");
+        cap2.setL2("CRM");
+        cap2.setL3("Lead Management");
+
+        BusinessCapabilityDTO cap3 = new BusinessCapabilityDTO();
+        cap3.setL1("Finance");
+        cap3.setL2("Accounting");
+        cap3.setL3("General Ledger");
+
+        return Arrays.asList(cap1, cap2, cap3);
     }
 }

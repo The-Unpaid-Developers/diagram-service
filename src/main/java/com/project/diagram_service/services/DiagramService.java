@@ -4,6 +4,7 @@ import com.project.diagram_service.client.CoreServiceClient;
 import com.project.diagram_service.dto.SystemDependencyDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDTO;
 import com.project.diagram_service.dto.SpecificSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.OverallSystemDependenciesDiagramDTO;
 import com.project.diagram_service.dto.PathDiagramDTO;
@@ -102,9 +103,11 @@ public class DiagramService {
      * Generates a hierarchical tree structure of business capabilities for D3.js visualization.
      * 
      * This method creates a tree structure with L1, L2, L3 capability levels and system nodes
-     * based on actual data from the core service. Each capability level includes a count of
-     * associated systems, and system nodes include detailed metadata. The structure uses
-     * parent-child relationships via parentId for D3.js tree rendering.
+     * based on actual data from the core service. It uses a two-phase approach:
+     * 1. Build the complete capability hierarchy (L1 -> L2 -> L3) from all business capabilities
+     * 2. Add systems to the existing capability nodes from solution reviews
+     * 
+     * This ensures all business capabilities appear in the tree, even those without systems.
      *
      * @return BusinessCapabilitiesTreeDTO containing the hierarchical tree structure
      * @throws IllegalStateException if the core service call fails
@@ -113,37 +116,84 @@ public class DiagramService {
         log.info("Generating business capabilities tree structure");
 
         try {
-            // Get existing business capabilities from core service
-            List<BusinessCapabilityDiagramDTO> capabilities = coreServiceClient.getBusinessCapabilities();
-            
             BusinessCapabilitiesTreeDTO tree = new BusinessCapabilitiesTreeDTO();
-            List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodes = new ArrayList<>();
-
-            // Track unique nodes to avoid duplicates (using full path as key)
             Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> uniqueNodes = new HashMap<>();
             
-            // Process each system and each of its business capability flows
-            for (BusinessCapabilityDiagramDTO system : capabilities) {
+            // Phase 1: Build complete capability tree from all business capabilities
+            List<BusinessCapabilityDTO> allCapabilities = coreServiceClient.getAllBusinessCapabilities();
+            log.info("Retrieved {} business capabilities from dropdown endpoint", allCapabilities.size());
+            
+            for (BusinessCapabilityDTO capability : allCapabilities) {
+                processCapabilityHierarchy(capability, uniqueNodes);
+            }
+            
+            log.info("Built base tree with {} capability nodes", uniqueNodes.size());
+            
+            // Phase 2: Add systems to the existing capability nodes
+            List<BusinessCapabilityDiagramDTO> systemCapabilities = coreServiceClient.getBusinessCapabilities();
+            log.info("Retrieved {} solution reviews with business capabilities", systemCapabilities.size());
+            
+            for (BusinessCapabilityDiagramDTO system : systemCapabilities) {
                 if (system.getBusinessCapabilities() != null) {
                     for (BusinessCapabilityDiagramDTO.BusinessCapability bizCap : system.getBusinessCapabilities()) {
-                        // Each business capability represents one complete flow: L1 -> L2 -> L3 -> System
+                        // Add system to existing capability tree, or create missing capability nodes if needed
                         processCapabilityFlow(system, bizCap, uniqueNodes);
                     }
                 }
             }
             
             // Convert unique nodes map to list and calculate system counts
-            nodes.addAll(uniqueNodes.values());
+            List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> nodes = new ArrayList<>(uniqueNodes.values());
             calculateSystemCounts(nodes);
 
             tree.setCapabilities(nodes);
-            log.info("Generated business capabilities tree with {} nodes from {} capability flows", 
-                     nodes.size(), countTotalFlows(capabilities));
+            log.info("Generated business capabilities tree with {} total nodes ({} capabilities + systems)", 
+                     nodes.size(), allCapabilities.size());
             return tree;
 
         } catch (Exception e) {
             log.error("Error generating business capabilities tree: {}", e.getMessage());
             throw new IllegalStateException("Failed to generate business capabilities tree", e);
+        }
+    }
+    
+    /**
+     * Processes a business capability hierarchy (L1 -> L2 -> L3) from the dropdown endpoint.
+     * Creates capability nodes without systems for the complete organizational structure.
+     */
+    private void processCapabilityHierarchy(BusinessCapabilityDTO capability,
+                                           Map<String, BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> uniqueNodes) {
+        String l1 = capability.getL1();
+        String l2 = capability.getL2();
+        String l3 = capability.getL3();
+        
+        if (l1 == null || l2 == null || l3 == null) {
+            log.warn("Incomplete capability hierarchy: L1={}, L2={}, L3={}", l1, l2, l3);
+            return;
+        }
+
+        // Create L1 node
+        String l1Id = generateCapabilityId(l1, "L1");
+        if (!uniqueNodes.containsKey(l1Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l1Node = createCapabilityNode(l1, "L1", null, 0);
+            l1Node.setId(l1Id);
+            uniqueNodes.put(l1Id, l1Node);
+        }
+
+        // Create L2 node with L1 as parent (include parent in ID for uniqueness)
+        String l2Id = generateCapabilityId(l2, "L2") + UNDER_SEPARATOR + l1Id;
+        if (!uniqueNodes.containsKey(l2Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l2Node = createCapabilityNode(l2, "L2", l1Id, 0);
+            l2Node.setId(l2Id);
+            uniqueNodes.put(l2Id, l2Node);
+        }
+
+        // Create L3 node with L2 as parent (include parent in ID for uniqueness)
+        String l3Id = generateCapabilityId(l3, "L3") + UNDER_SEPARATOR + l2Id;
+        if (!uniqueNodes.containsKey(l3Id)) {
+            BusinessCapabilitiesTreeDTO.BusinessCapabilityNode l3Node = createCapabilityNode(l3, "L3", l2Id, 0);
+            l3Node.setId(l3Id);
+            uniqueNodes.put(l3Id, l3Node);
         }
     }
 

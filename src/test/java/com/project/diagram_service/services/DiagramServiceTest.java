@@ -10,6 +10,7 @@ import com.project.diagram_service.dto.CommonDiagramDTO;
 import com.project.diagram_service.dto.CommonDiagramDTO.NodeDTO;
 import com.project.diagram_service.dto.BusinessCapabilityDiagramDTO;
 import com.project.diagram_service.dto.BusinessCapabilitiesTreeDTO;
+import com.project.diagram_service.dto.BusinessCapabilityDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -1717,7 +1718,12 @@ class DiagramServiceTest {
     @DisplayName("Should transform single system with complete hierarchy from raw data")
     void testTransformSingleSystemWithCompleteHierarchy() {
         // Given - Raw data from MongoDB
+        List<BusinessCapabilityDTO> allCapabilities = createAllCapabilitiesData(
+            "Customer Management", "CRM", "Contact Management"
+        );
         List<BusinessCapabilityDiagramDTO> rawData = createRawSingleSystemData();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -1762,6 +1768,7 @@ class DiagramServiceTest {
         // Verify system has correct flow-specific ID
         assertThat(system.getId()).isEqualTo("sys-001-under-l3-contact-management-under-l2-crm-under-l1-customer-management");
 
+        verify(coreServiceClient).getAllBusinessCapabilities();
         verify(coreServiceClient).getBusinessCapabilities();
     }
 
@@ -1769,7 +1776,12 @@ class DiagramServiceTest {
     @DisplayName("Should handle multiple systems under same L3 from raw data")
     void testMultipleSystemsUnderSameL3() {
         // Given - 2 systems under Contact Management
+        List<BusinessCapabilityDTO> allCapabilities = createAllCapabilitiesData(
+            "Customer Management", "CRM", "Contact Management"
+        );
         List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleSystemsSameL3Data();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -1812,7 +1824,13 @@ class DiagramServiceTest {
     @DisplayName("Should handle multiple L3s under same L2 from raw data")
     void testMultipleL3sUnderSameL2() {
         // Given - 2 L3s under CRM
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Customer Management", "CRM", "Contact Management"),
+            createCapabilityDTO("Customer Management", "CRM", "Lead Management")
+        );
         List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleL3sSameL2Data();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -1851,7 +1869,13 @@ class DiagramServiceTest {
     @DisplayName("Should handle multiple L2s under same L1 from raw data")
     void testMultipleL2sUnderSameL1() {
         // Given - 2 L2s under Customer Management
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Customer Management", "CRM", "Contact Management"),
+            createCapabilityDTO("Customer Management", "Customer Service", "Ticket Management")
+        );
         List<BusinessCapabilityDiagramDTO> rawData = createRawMultipleL2sSameL1Data();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -1887,6 +1911,12 @@ class DiagramServiceTest {
     @DisplayName("Should handle system with multiple business capability flows - each flow creates separate leaf nodes")
     void testSystemWithMultipleCapabilityFlows() {
         // Given - System with multiple business capability flows (real-world scenario)
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Customer Management", "CRM", "Contact Management"),
+            createCapabilityDTO("Customer Management", "CRM", "Lead Management"),
+            createCapabilityDTO("Sales", "CRM", "Opportunity Management")
+        );
+        
         BusinessCapabilityDiagramDTO multiCapabilitySystem = new BusinessCapabilityDiagramDTO();
         multiCapabilitySystem.setSystemCode("sys-001");
         multiCapabilitySystem.setSolutionOverview(createSolutionOverview("Multi-Purpose CRM"));
@@ -1901,6 +1931,7 @@ class DiagramServiceTest {
             createBusinessCapability("Sales", "CRM", "Opportunity Management")
         ));
         
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(multiCapabilitySystem));
 
         // When
@@ -1957,10 +1988,16 @@ class DiagramServiceTest {
     @DisplayName("Should handle L2/L3 capabilities with same names under different parents")
     void testSameNameCapabilitiesUnderDifferentParents() {
         // Given - Scenario where "Analytics" L2 appears under both "Customer Management" and "Sales"
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Customer Management", "Analytics", "Customer Insights"),
+            createCapabilityDTO("Sales", "Analytics", "Sales Insights")
+        );
         List<BusinessCapabilityDiagramDTO> rawData = Arrays.asList(
             createRawSystem("sys-001", "Customer Analytics", "Customer Management", "Analytics", "Customer Insights"),
             createRawSystem("sys-002", "Sales Analytics", "Sales", "Analytics", "Sales Insights")
         );
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -1995,6 +2032,8 @@ class DiagramServiceTest {
     @DisplayName("Should handle UNKNOWN capabilities from raw MongoDB data structure")
     void testHandleUnknownCapabilitiesFromRawMongoDB() {
         // Given - Raw data exactly like MongoDB structure you provided
+        List<BusinessCapabilityDTO> allCapabilities = createAllCapabilitiesData("UNKNOWN", "UNKNOWN", "UNKNOWN");
+        
         BusinessCapabilityDiagramDTO rawSystem = new BusinessCapabilityDiagramDTO();
         rawSystem.setSystemCode("sys-001");
         
@@ -2033,6 +2072,7 @@ class DiagramServiceTest {
         capability.setRemarks(null);
         rawSystem.setBusinessCapabilities(Arrays.asList(capability));
         
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(Arrays.asList(rawSystem));
 
         // When - Transform raw data into hierarchical tree
@@ -2132,7 +2172,12 @@ class DiagramServiceTest {
     @DisplayName("Should handle missing solution overview gracefully from raw data")
     void testMissingSolutionOverview() {
         // Given
+        List<BusinessCapabilityDTO> allCapabilities = createAllCapabilitiesData(
+            "Customer Management", "CRM", "Contact Management"
+        );
         List<BusinessCapabilityDiagramDTO> rawData = createRawDataWithMissingSolution();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -2152,6 +2197,7 @@ class DiagramServiceTest {
     @DisplayName("Should handle empty business capabilities list")
     void testEmptyBusinessCapabilities() {
         // Given
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(Collections.emptyList());
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(Collections.emptyList());
 
         // When
@@ -2166,7 +2212,7 @@ class DiagramServiceTest {
     @DisplayName("Should handle service exception gracefully")
     void testServiceException() {
         // Given
-        when(coreServiceClient.getBusinessCapabilities())
+        when(coreServiceClient.getAllBusinessCapabilities())
             .thenThrow(new RuntimeException("Database connection failed"));
 
         // When & Then
@@ -2177,10 +2223,128 @@ class DiagramServiceTest {
     }
 
     @Test
+    @DisplayName("Should include capabilities without systems in tree (two-phase approach)")
+    void testCapabilitiesWithoutSystems() {
+        // Given - All capabilities includes ones without systems
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Customer Management", "CRM", "Contact Management"),
+            createCapabilityDTO("Customer Management", "CRM", "Lead Management"),  // No system
+            createCapabilityDTO("Finance", "Accounting", "General Ledger")  // No system
+        );
+        
+        // Only one system exists (Contact Management)
+        List<BusinessCapabilityDiagramDTO> systemCapabilities = Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management")
+        );
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(systemCapabilities);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then - Should have all capability nodes even those without systems
+        assertThat(result).isNotNull();
+        
+        // Should have 2 L1s (Customer Management + Finance)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .toList();
+        assertThat(l1Nodes).hasSize(2);
+        assertThat(l1Nodes).extracting("name")
+            .containsExactlyInAnyOrder("Customer Management", "Finance");
+
+        // Should have 3 L3s (Contact Management + Lead Management + General Ledger)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l3Nodes = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()))
+            .toList();
+        assertThat(l3Nodes).hasSize(3);
+        assertThat(l3Nodes).extracting("name")
+            .containsExactlyInAnyOrder("Contact Management", "Lead Management", "General Ledger");
+
+        // But only 1 system node (since only Contact Management has a system)
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> systemNodes = result.getCapabilities().stream()
+            .filter(n -> "System".equals(n.getLevel()))
+            .toList();
+        assertThat(systemNodes).hasSize(1);
+        assertThat(systemNodes.get(0).getName()).isEqualTo("CRM System");
+
+        // Verify systemCount is correct
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode contactMgmtL3 = l3Nodes.stream()
+            .filter(n -> "Contact Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(contactMgmtL3.getSystemCount()).isEqualTo(1);  // Has 1 system
+
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode leadMgmtL3 = l3Nodes.stream()
+            .filter(n -> "Lead Management".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(leadMgmtL3.getSystemCount()).isEqualTo(0);  // No systems
+
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode glL3 = l3Nodes.stream()
+            .filter(n -> "General Ledger".equals(n.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(glL3.getSystemCount()).isEqualTo(0);  // No systems
+
+        verify(coreServiceClient).getAllBusinessCapabilities();
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
+    @DisplayName("Should handle system with capability not in dropdown endpoint")
+    void testSystemWithCapabilityNotInDropdown() {
+        // Given - Dropdown has one capability, but system has different capability
+        List<BusinessCapabilityDTO> allCapabilities = Arrays.asList(
+            createCapabilityDTO("Finance", "Accounting", "General Ledger")
+        );
+        
+        // System has capability not in dropdown
+        List<BusinessCapabilityDiagramDTO> systemCapabilities = Arrays.asList(
+            createRawSystem("sys-001", "CRM System", "Customer Management", "CRM", "Contact Management")
+        );
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
+        when(coreServiceClient.getBusinessCapabilities()).thenReturn(systemCapabilities);
+
+        // When
+        BusinessCapabilitiesTreeDTO result = diagramService.getBusinessCapabilitiesTree();
+
+        // Then - Should create both capability hierarchies
+        List<BusinessCapabilitiesTreeDTO.BusinessCapabilityNode> l1Nodes = result.getCapabilities().stream()
+            .filter(n -> "L1".equals(n.getLevel()))
+            .toList();
+        assertThat(l1Nodes).hasSize(2);
+        assertThat(l1Nodes).extracting("name")
+            .containsExactlyInAnyOrder("Finance", "Customer Management");
+
+        // Finance L3 should have no systems
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode financeL3 = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()) && n.getName().equals("General Ledger"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(financeL3.getSystemCount()).isEqualTo(0);
+
+        // Customer Management L3 should have 1 system
+        BusinessCapabilitiesTreeDTO.BusinessCapabilityNode crmL3 = result.getCapabilities().stream()
+            .filter(n -> "L3".equals(n.getLevel()) && n.getName().equals("Contact Management"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(crmL3.getSystemCount()).isEqualTo(1);
+
+        verify(coreServiceClient).getAllBusinessCapabilities();
+        verify(coreServiceClient).getBusinessCapabilities();
+    }
+
+    @Test
     @DisplayName("Should handle complex multi-level hierarchy from raw data")
     void testComplexMultiLevelHierarchy() {
         // Given - Complex scenario: 2 L1s, multiple L2s, L3s, and systems
+        List<BusinessCapabilityDTO> allCapabilities = createMultipleCapabilitiesData();
         List<BusinessCapabilityDiagramDTO> rawData = createRawComplexHierarchyData();
+        
+        when(coreServiceClient.getAllBusinessCapabilities()).thenReturn(allCapabilities);
         when(coreServiceClient.getBusinessCapabilities()).thenReturn(rawData);
 
         // When
@@ -2677,6 +2841,41 @@ class DiagramServiceTest {
         capability.setL3Capability(l3);
         capability.setRemarks(null); // Matches MongoDB raw data structure
         return capability;
+    }
+
+    /**
+     * Creates a list of BusinessCapabilityDTO objects for the dropdown endpoint
+     */
+    private List<BusinessCapabilityDTO> createAllCapabilitiesData(String l1, String l2, String l3) {
+        BusinessCapabilityDTO dto = new BusinessCapabilityDTO();
+        dto.setL1(l1);
+        dto.setL2(l2);
+        dto.setL3(l3);
+        return Arrays.asList(dto);
+    }
+
+    /**
+     * Creates multiple BusinessCapabilityDTO objects for complex hierarchies
+     */
+    private List<BusinessCapabilityDTO> createMultipleCapabilitiesData() {
+        return Arrays.asList(
+            createCapabilityDTO("Customer Management", "CRM", "Contact Management"),
+            createCapabilityDTO("Customer Management", "CRM", "Lead Management"),
+            createCapabilityDTO("Customer Management", "Customer Service", "Ticket Management"),
+            createCapabilityDTO("Product Management", "Product Catalog", "Item Management"),
+            createCapabilityDTO("Product Management", "Product Catalog", "Price Management")
+        );
+    }
+
+    /**
+     * Helper to create a single BusinessCapabilityDTO
+     */
+    private BusinessCapabilityDTO createCapabilityDTO(String l1, String l2, String l3) {
+        BusinessCapabilityDTO dto = new BusinessCapabilityDTO();
+        dto.setL1(l1);
+        dto.setL2(l2);
+        dto.setL3(l3);
+        return dto;
     }
 
     // Additional edge case tests to improve coverage
