@@ -1570,7 +1570,7 @@ public class DiagramService {
                                                            Set<String> nodeIdentifiers) {
         for (SystemDependencyDTO system : allDependencies) {
             if (system.getIntegrationFlows() != null) {
-                processSystemFlowsForOverallDiagram(system, uniqueLinks, uniqueNodes, linkIdentifiers, nodeIdentifiers);
+                processSystemFlowsForOverallDiagram(system, allDependencies, uniqueLinks, uniqueNodes, linkIdentifiers, nodeIdentifiers);
             }
         }
     }
@@ -1579,6 +1579,7 @@ public class DiagramService {
      * Processes integration flows for a single system in overall diagram context.
      */
     private void processSystemFlowsForOverallDiagram(SystemDependencyDTO system,
+                                                    List<SystemDependencyDTO> allDependencies,
                                                     List<CommonDiagramDTO.SimpleLinkDTO> uniqueLinks,
                                                     List<CommonDiagramDTO.NodeDTO> uniqueNodes,
                                                     Map<String, Integer> linkIdentifiers,
@@ -1586,7 +1587,7 @@ public class DiagramService {
         for (SystemDependencyDTO.IntegrationFlow flow : system.getIntegrationFlows()) {
             processIntegrationFlow(system, flow, uniqueLinks, linkIdentifiers);
             addSystemNodeIfNotExists(system, uniqueNodes, nodeIdentifiers);
-            addCounterpartNodeIfNotExists(flow, uniqueNodes, nodeIdentifiers);
+            addCounterpartNodeIfNotExists(flow, allDependencies, uniqueNodes, nodeIdentifiers);
         }
     }
 
@@ -1657,12 +1658,13 @@ public class DiagramService {
      * Adds a counterpart system node if it doesn't already exist.
      */
     private void addCounterpartNodeIfNotExists(SystemDependencyDTO.IntegrationFlow flow,
+                                             List<SystemDependencyDTO> allDependencies,
                                              List<CommonDiagramDTO.NodeDTO> uniqueNodes,
                                              Set<String> nodeIdentifiers) {
         String counterpartCode = flow.getCounterpartSystemCode();
         if (!nodeIdentifiers.contains(counterpartCode)) {
             nodeIdentifiers.add(counterpartCode);
-            CommonDiagramDTO.NodeDTO node = createCounterpartNode(counterpartCode);
+            CommonDiagramDTO.NodeDTO node = createCounterpartNode(counterpartCode, allDependencies);
             uniqueNodes.add(node);
         }
     }
@@ -1681,11 +1683,28 @@ public class DiagramService {
 
     /**
      * Creates a counterpart system node.
+     * Looks up the system name from allDependencies if the system exists in our database.
      */
-    private CommonDiagramDTO.NodeDTO createCounterpartNode(String counterpartCode) {
+    private CommonDiagramDTO.NodeDTO createCounterpartNode(String counterpartCode, List<SystemDependencyDTO> allDependencies) {
         CommonDiagramDTO.NodeDTO node = new CommonDiagramDTO.NodeDTO();
         node.setId(counterpartCode);
-        node.setName(counterpartCode);
+        
+        // Try to find the system in our dependencies to get the proper name
+        String systemName = counterpartCode; // Default to counterpartCode
+        if (counterpartCode != null && !counterpartCode.isEmpty()) {
+            systemName = allDependencies.stream()
+                    .filter(dep -> dep.getSystemCode() != null && counterpartCode.equals(dep.getSystemCode()))
+                    .map(dep -> dep.getSolutionOverview())
+                    .filter(Objects::nonNull)
+                    .map(overview -> overview.getSolutionDetails())
+                    .filter(Objects::nonNull)
+                    .map(details -> details.getSolutionName())
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(counterpartCode); // Use counterpartCode if system not found
+        }
+        
+        node.setName(systemName);
         node.setType(EXTERNAL_SYSTEM_TYPE);
         node.setCriticality(STANDARD_CRITICALITY);
         return node;
